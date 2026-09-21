@@ -38,6 +38,7 @@
     box-shadow: 0 10px 30px rgba(79,172,254,0.5);
     transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
     text-align: center; letter-spacing: 0.3px;
+    white-space: nowrap;
   }
   #mission.deliver {
     background: linear-gradient(135deg, #f093fb, #f5576c);
@@ -99,6 +100,37 @@
   }
   #toast.show { transform: translate(-50%, -50%) scale(1); }
 
+  /* ⚠️ ՆՈՐ — direction arrow */
+  #directionArrow {
+    position: fixed;
+    top: 50%; left: 50%;
+    font-size: 48px;
+    color: #ffd166;
+    text-shadow: 0 0 20px rgba(255,209,102,0.8);
+    pointer-events: none;
+    z-index: 9;
+    opacity: 0;
+    transition: opacity 0.3s;
+    font-weight: 900;
+    will-change: transform;
+  }
+
+  /* ⚠️ ՆՈՐ — FPS counter (DEBUG-ի համար) */
+  #fpsCounter {
+    position: fixed;
+    top: 16px; right: 16px;
+    background: rgba(0,0,0,0.6);
+    color: #0f0;
+    font-family: monospace;
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    z-index: 20;
+    pointer-events: none;
+    display: none;
+  }
+  #fpsCounter.show { display: block; }
+
   #startScreen {
     position: fixed; inset: 0;
     background: linear-gradient(135deg, #1a1a2e, #16213e);
@@ -149,7 +181,7 @@
   <div class="item"><span class="label">⏱️</span><span class="value" id="timer">0:00</span></div>
 </div>
 
-<div class="hud" id="mission">Գնա՛ պատվերի կետ 📍</div>
+<div class="hud" id="mission">📍 Գնա՛ պատվերի կետ</div>
 
 <div class="hud" id="controls">
   <b>W</b> / <b>↑</b> — արագացնել<br>
@@ -169,6 +201,8 @@
 </div>
 
 <div class="hud" id="toast">+10 💰</div>
+<div id="directionArrow">⬆</div>
+<div id="fpsCounter">FPS: 0</div>
 
 <script type="importmap">
 {
@@ -181,6 +215,11 @@
 <script type="module">
 
 import * as THREE from 'three';
+
+// ⚠️ DEBUG flag — FPS և console.log-երի համար
+const DEBUG = false;
+
+// === ՄԱՍ 2-ը կցվում է այստեղից ===
 
 // === ՄԱՍ 2 — THREE.JS SETUP + LIGHTS + GROUND ===
 
@@ -219,6 +258,13 @@ const CAM_LOOK_OFFSET = new THREE.Vector3(0, 0, -4);
 // Սկզբնական դիրք
 camera.position.copy(CAM_OFFSET);
 camera.lookAt(0, 0, 0);
+
+const CAM_DISTANCE = 13;
+const CAM_HEIGHT = 11;
+const CAM_LOOK_AHEAD = 7;
+const CAM_SMOOTH_POS = 6.0;
+const CAM_SMOOTH_LOOK = 8.0;
+const SUN_OFFSET = new THREE.Vector3(60, 90, 40);
 
 // ========== LIGHTS ==========
 // Ambient / hemisphere — ընդհանուր լույս
@@ -284,33 +330,19 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// === ՄԱՍ 3-ը կցվում է այստեղ ===
-
- /* ============================================================
-   ՄԱՍ 3 — STREETS + SIDEWALKS + ROAD MARKINGS
-   ============================================================ */
-
-// ========== STREET NETWORK ==========
-// Քաղաքը 200x200 մետր է, փողոցները ցանց են կազմում
-// Ամեն փողոց 8 մետր լայնություն ունի
-
 /* ============================================================
-   ՄԱՍ 3 — STREETS + SIDEWALKS + ROAD MARKINGS (ՃՇՏՏՎԱԾ)
+   ՄԱՍ 3 — STREETS + SIDEWALKS + ROAD MARKINGS
+   Մայթերը ԿՏՐՎԱԾ են խաչմերուկներում
    ============================================================ */
 
 // ========== STREET NETWORK ==========
-// Փողոցները տարբեր լայնությունների են։
-// Կենտրոնական պողոտան ամենալայնն է (14մ)։
-
 const STREETS = [
-  // Հորիզոնական փողոցներ (z-ը հաստատուն)
   { x1: -100, x2: 100, z1: -7,  z2: 7,   width: 14, type: 'avenue' },
   { x1: -100, x2: 100, z1: -41, z2: -31, width: 10, type: 'main' },
   { x1: -100, x2: 100, z1: -75, z2: -68, width: 7,  type: 'small' },
   { x1: -100, x2: 100, z1: 31,  z2: 41,  width: 10, type: 'main' },
   { x1: -100, x2: 100, z1: 68,  z2: 75,  width: 7,  type: 'small' },
 
-  // Ուղղահայաց փողոցներ (x-ը հաստատուն)
   { z1: -100, z2: 100, x1: -7,  x2: 7,   width: 14, type: 'avenue' },
   { z1: -100, z2: 100, x1: -41, x2: -31, width: 10, type: 'main' },
   { z1: -100, z2: 100, x1: -75, x2: -68, width: 7,  type: 'small' },
@@ -319,44 +351,68 @@ const STREETS = [
 ];
 
 // ========== MATERIALS ==========
-const streetMat = new THREE.MeshStandardMaterial({
-  color: 0x3a3a3a,
-  roughness: 0.95,
-  metalness: 0
-});
-
-const avenueMat = new THREE.MeshStandardMaterial({
-  color: 0x353535,
-  roughness: 0.9,
-  metalness: 0
-});
-
-const sidewalkMat = new THREE.MeshStandardMaterial({
-  color: 0xb8b8b8,
-  roughness: 0.9,
-  metalness: 0
-});
-
-const curbMat = new THREE.MeshStandardMaterial({
-  color: 0x888888,
-  roughness: 0.85
-});
-
+const streetMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.95 });
+const avenueMat = new THREE.MeshStandardMaterial({ color: 0x353535, roughness: 0.9 });
+const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0xb8b8b8, roughness: 0.9 });
+const curbMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.85 });
 const dashMat = new THREE.MeshStandardMaterial({
-  color: 0xffdd55,
-  emissive: 0x443300,
-  emissiveIntensity: 0.4,
-  roughness: 0.6
+  color: 0xffdd55, emissive: 0x443300, emissiveIntensity: 0.4, roughness: 0.6
 });
+const crosswalkMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 });
 
-const crosswalkMat = new THREE.MeshStandardMaterial({
-  color: 0xffffff,
-  roughness: 0.8
-});
-
-// ========== SIDEWALK DATA (for collision) ==========
-// Մայթերի տվյալները կոլիզիայի համար
+// ========== SIDEWALK COLLISION DATA ==========
 const sidewalks = [];
+
+// ========== ՓՈՂՈՑՆԵՐԻ ՄԵԾԱՑՈՒՄԸ ==========
+// Sidewalk-ը գծելիս ամեն փողոց «կտրում» ենք ուղղահայաց փողոցների տարածքում։
+
+const SIDEWALK_WIDTH = 1.5;
+const SIDEWALK_HEIGHT = 0.25;
+
+// Ուղղահայաց փողոցների x-միջակայքերը (bացվածքների համար)
+const VERTICAL_GAPS = [
+  { min: -7 - SIDEWALK_WIDTH, max: 7 + SIDEWALK_WIDTH },     // avenue
+  { min: -41 - SIDEWALK_WIDTH, max: -31 + SIDEWALK_WIDTH },   // main
+  { min: -75 - SIDEWALK_WIDTH, max: -68 + SIDEWALK_WIDTH },   // small
+  { min: 31 - SIDEWALK_WIDTH, max: 41 + SIDEWALK_WIDTH },     // main
+  { min: 68 - SIDEWALK_WIDTH, max: 75 + SIDEWALK_WIDTH },     // small
+];
+
+// Հորիզոնական փողոցների z-միջակայքերը
+const HORIZONTAL_GAPS = [
+  { min: -7 - SIDEWALK_WIDTH, max: 7 + SIDEWALK_WIDTH },
+  { min: -41 - SIDEWALK_WIDTH, max: -31 + SIDEWALK_WIDTH },
+  { min: -75 - SIDEWALK_WIDTH, max: -68 + SIDEWALK_WIDTH },
+  { min: 31 - SIDEWALK_WIDTH, max: 41 + SIDEWALK_WIDTH },
+  { min: 68 - SIDEWALK_WIDTH, max: 75 + SIDEWALK_WIDTH },
+];
+
+// Ֆունկցիա՝ վերադարձնում է [start, end] հատվածների զանգված՝
+// բաց թողնելով gaps-ի տարածքները
+function splitSegment(start, end, gaps) {
+  const segments = [];
+  let cursor = start;
+
+  // Դասավորում ենք gaps-ը ըստ min-ի
+  const sorted = [...gaps].sort((a, b) => a.min - b.min);
+
+  for (const g of sorted) {
+    if (g.max <= cursor) continue;
+    if (g.min >= end) break;
+
+    const segEnd = Math.max(cursor, g.min);
+    if (segEnd > cursor) {
+      segments.push({ start: cursor, end: segEnd });
+    }
+    cursor = Math.max(cursor, g.max);
+  }
+
+  if (cursor < end) {
+    segments.push({ start: cursor, end: end });
+  }
+
+  return segments;
+}
 
 // ========== BUILD STREETS ==========
 STREETS.forEach(s => {
@@ -376,110 +432,126 @@ STREETS.forEach(s => {
   road.receiveShadow = true;
   scene.add(road);
 
-  // --- Sidewalks (2 կողմից) ---
-  const sw = 1.5;
-  const swHeight = 0.25;
-
+  // --- Sidewalks (ԿՏՐՎԱԾ) ---
   if (isHorizontal) {
-    // Վերին մայթ (հյուսիս)
-    const s1 = new THREE.Mesh(
-      new THREE.BoxGeometry(w, swHeight, sw),
-      sidewalkMat
-    );
-    s1.position.set(cx, swHeight / 2, s.z1 - sw / 2);
-    s1.receiveShadow = true;
-    s1.castShadow = true;
-    scene.add(s1);
+    // Հորիզոնական փողոցի մայթերը ձգվում են x-ով,
+    // բաց թողնելով VERTICAL_GAPS-ը
+    const segments = splitSegment(s.x1, s.x2, VERTICAL_GAPS);
 
-    // Ներքևի մայթ (հարավ)
-    const s2 = new THREE.Mesh(
-      new THREE.BoxGeometry(w, swHeight, sw),
-      sidewalkMat
-    );
-    s2.position.set(cx, swHeight / 2, s.z2 + sw / 2);
-    s2.receiveShadow = true;
-    s2.castShadow = true;
-    scene.add(s2);
+    // Հյուսիսային մայթ (z = s.z1 - sw-ից մինչև s.z1)
+    // Հարավային մայթ (z = s.z2-ից մինչև s.z2 + sw)
+    segments.forEach(seg => {
+      const segW = seg.end - seg.start;
+      const segCx = (seg.start + seg.end) / 2;
 
-    // Կոլիզիայի տվյալներ
-    sidewalks.push({
-      minX: s.x1, maxX: s.x2,
-      minZ: s.z1 - sw, maxZ: s.z1
+      // Հյուսիս
+      const n = new THREE.Mesh(
+        new THREE.BoxGeometry(segW, SIDEWALK_HEIGHT, SIDEWALK_WIDTH),
+        sidewalkMat
+      );
+      n.position.set(segCx, SIDEWALK_HEIGHT / 2, s.z1 - SIDEWALK_WIDTH / 2);
+      n.receiveShadow = true;
+      n.castShadow = true;
+      scene.add(n);
+
+      // Հարավ
+      const so = new THREE.Mesh(
+        new THREE.BoxGeometry(segW, SIDEWALK_HEIGHT, SIDEWALK_WIDTH),
+        sidewalkMat
+      );
+      so.position.set(segCx, SIDEWALK_HEIGHT / 2, s.z2 + SIDEWALK_WIDTH / 2);
+      so.receiveShadow = true;
+      so.castShadow = true;
+      scene.add(so);
+
+      // Collision
+      sidewalks.push({
+        minX: seg.start, maxX: seg.end,
+        minZ: s.z1 - SIDEWALK_WIDTH, maxZ: s.z1
+      });
+      sidewalks.push({
+        minX: seg.start, maxX: seg.end,
+        minZ: s.z2, maxZ: s.z2 + SIDEWALK_WIDTH
+      });
+
+      // Curb — հյուսիս
+      const c1 = new THREE.Mesh(
+        new THREE.BoxGeometry(segW, 0.3, 0.15),
+        curbMat
+      );
+      c1.position.set(segCx, 0.15, s.z1 - 0.075);
+      c1.castShadow = true;
+      scene.add(c1);
+
+      // Curb — հարավ
+      const c2 = new THREE.Mesh(
+        new THREE.BoxGeometry(segW, 0.3, 0.15),
+        curbMat
+      );
+      c2.position.set(segCx, 0.15, s.z2 + 0.075);
+      c2.castShadow = true;
+      scene.add(c2);
     });
-    sidewalks.push({
-      minX: s.x1, maxX: s.x2,
-      minZ: s.z2, maxZ: s.z2 + sw
-    });
-
-    // Curb (եզրաքար) — վերին
-    const curb1 = new THREE.Mesh(
-      new THREE.BoxGeometry(w, 0.3, 0.15),
-      curbMat
-    );
-    curb1.position.set(cx, 0.15, s.z1 - 0.075);
-    curb1.castShadow = true;
-    scene.add(curb1);
-
-    // Curb — ներքևի
-    const curb2 = new THREE.Mesh(
-      new THREE.BoxGeometry(w, 0.3, 0.15),
-      curbMat
-    );
-    curb2.position.set(cx, 0.15, s.z2 + 0.075);
-    curb2.castShadow = true;
-    scene.add(curb2);
   } else {
-    // Ձախ մայթ (արևմուտք)
-    const s1 = new THREE.Mesh(
-      new THREE.BoxGeometry(sw, swHeight, d),
-      sidewalkMat
-    );
-    s1.position.set(s.x1 - sw / 2, swHeight / 2, cz);
-    s1.receiveShadow = true;
-    s1.castShadow = true;
-    scene.add(s1);
+    // Ուղղահայաց փողոցի մայթերը ձգվում են z-ով,
+    // բաց թողնելով HORIZONTAL_GAPS-ը
+    const segments = splitSegment(s.z1, s.z2, HORIZONTAL_GAPS);
 
-    // Աջ մայթ (արևելք)
-    const s2 = new THREE.Mesh(
-      new THREE.BoxGeometry(sw, swHeight, d),
-      sidewalkMat
-    );
-    s2.position.set(s.x2 + sw / 2, swHeight / 2, cz);
-    s2.receiveShadow = true;
-    s2.castShadow = true;
-    scene.add(s2);
+    segments.forEach(seg => {
+      const segD = seg.end - seg.start;
+      const segCz = (seg.start + seg.end) / 2;
 
-    // Կոլիզիայի տվյալներ
-    sidewalks.push({
-      minX: s.x1 - sw, maxX: s.x1,
-      minZ: s.z1, maxZ: s.z2
+      // Արևմտյան մայթ (x = s.x1 - sw-ից մինչև s.x1)
+      const wst = new THREE.Mesh(
+        new THREE.BoxGeometry(SIDEWALK_WIDTH, SIDEWALK_HEIGHT, segD),
+        sidewalkMat
+      );
+      wst.position.set(s.x1 - SIDEWALK_WIDTH / 2, SIDEWALK_HEIGHT / 2, segCz);
+      wst.receiveShadow = true;
+      wst.castShadow = true;
+      scene.add(wst);
+
+      // Արևելյան մայթ
+      const est = new THREE.Mesh(
+        new THREE.BoxGeometry(SIDEWALK_WIDTH, SIDEWALK_HEIGHT, segD),
+        sidewalkMat
+      );
+      est.position.set(s.x2 + SIDEWALK_WIDTH / 2, SIDEWALK_HEIGHT / 2, segCz);
+      est.receiveShadow = true;
+      est.castShadow = true;
+      scene.add(est);
+
+      // Collision
+      sidewalks.push({
+        minX: s.x1 - SIDEWALK_WIDTH, maxX: s.x1,
+        minZ: seg.start, maxZ: seg.end
+      });
+      sidewalks.push({
+        minX: s.x2, maxX: s.x2 + SIDEWALK_WIDTH,
+        minZ: seg.start, maxZ: seg.end
+      });
+
+      // Curb — արևմուտք
+      const c1 = new THREE.Mesh(
+        new THREE.BoxGeometry(0.15, 0.3, segD),
+        curbMat
+      );
+      c1.position.set(s.x1 - 0.075, 0.15, segCz);
+      c1.castShadow = true;
+      scene.add(c1);
+
+      // Curb — արևելք
+      const c2 = new THREE.Mesh(
+        new THREE.BoxGeometry(0.15, 0.3, segD),
+        curbMat
+      );
+      c2.position.set(s.x2 + 0.075, 0.15, segCz);
+      c2.castShadow = true;
+      scene.add(c2);
     });
-    sidewalks.push({
-      minX: s.x2, maxX: s.x2 + sw,
-      minZ: s.z1, maxZ: s.z2
-    });
-
-    // Curb — ձախ
-    const curb1 = new THREE.Mesh(
-      new THREE.BoxGeometry(0.15, 0.3, d),
-      curbMat
-    );
-    curb1.position.set(s.x1 - 0.075, 0.15, cz);
-    curb1.castShadow = true;
-    scene.add(curb1);
-
-    // Curb — աջ
-    const curb2 = new THREE.Mesh(
-      new THREE.BoxGeometry(0.15, 0.3, d),
-      curbMat
-    );
-    curb2.position.set(s.x2 + 0.075, 0.15, cz);
-    curb2.castShadow = true;
-    scene.add(curb2);
   }
 
   // --- Center dashed line ---
-  // Միայն մեծ փողոցների ու պողոտայի վրա
   if (s.type === 'avenue' || s.type === 'main') {
     const length = Math.max(w, d);
     const dashCount = Math.floor(length / 8);
@@ -508,37 +580,23 @@ STREETS.forEach(s => {
   // --- Avenue side lines ---
   if (s.type === 'avenue') {
     const lineMat = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      emissive: 0x333333,
-      emissiveIntensity: 0.2
+      color: 0xffffff, emissive: 0x333333, emissiveIntensity: 0.2
     });
 
     if (isHorizontal) {
-      const line1 = new THREE.Mesh(
-        new THREE.BoxGeometry(w, 0.06, 0.15),
-        lineMat
-      );
+      const line1 = new THREE.Mesh(new THREE.BoxGeometry(w, 0.06, 0.15), lineMat);
       line1.position.set(cx, 0.06, s.z1 + 0.5);
       scene.add(line1);
 
-      const line2 = new THREE.Mesh(
-        new THREE.BoxGeometry(w, 0.06, 0.15),
-        lineMat
-      );
+      const line2 = new THREE.Mesh(new THREE.BoxGeometry(w, 0.06, 0.15), lineMat);
       line2.position.set(cx, 0.06, s.z2 - 0.5);
       scene.add(line2);
     } else {
-      const line1 = new THREE.Mesh(
-        new THREE.BoxGeometry(0.15, 0.06, d),
-        lineMat
-      );
+      const line1 = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.06, d), lineMat);
       line1.position.set(s.x1 + 0.5, 0.06, cz);
       scene.add(line1);
 
-      const line2 = new THREE.Mesh(
-        new THREE.BoxGeometry(0.15, 0.06, d),
-        lineMat
-      );
+      const line2 = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.06, d), lineMat);
       line2.position.set(s.x2 - 0.5, 0.06, cz);
       scene.add(line2);
     }
@@ -553,18 +611,15 @@ const vStreets = STREETS.filter(s => (s.z2 - s.z1) > (s.x2 - s.x1));
 
 hStreets.forEach(h => {
   vStreets.forEach(v => {
-    const cx = (v.x1 + v.x2) / 2;
-    const cz = (h.z1 + h.z2) / 2;
     intersections.push({
-      x: cx,
-      z: cz,
+      x: (v.x1 + v.x2) / 2,
+      z: (h.z1 + h.z2) / 2,
       hw: (v.x2 - v.x1) / 2,
       hh: (h.z2 - h.z1) / 2
     });
   });
 });
 
-// Ամեն խաչմերուկում zebra-ներ 4 ուղղությամբ
 intersections.forEach(inter => {
   const stripeCount = 4;
   const stripeW = 0.7;
@@ -573,7 +628,6 @@ intersections.forEach(inter => {
   for (let i = 0; i < stripeCount; i++) {
     const offset = (i - (stripeCount - 1) / 2) * (stripeW + stripeGap);
 
-    // Հյուսիս
     const z1 = new THREE.Mesh(
       new THREE.BoxGeometry(stripeW, 0.07, inter.hh * 0.8),
       crosswalkMat
@@ -581,7 +635,6 @@ intersections.forEach(inter => {
     z1.position.set(inter.x + offset, 0.07, inter.z - inter.hh - 1.5);
     scene.add(z1);
 
-    // Հարավ
     const z2 = new THREE.Mesh(
       new THREE.BoxGeometry(stripeW, 0.07, inter.hh * 0.8),
       crosswalkMat
@@ -589,7 +642,6 @@ intersections.forEach(inter => {
     z2.position.set(inter.x + offset, 0.07, inter.z + inter.hh + 1.5);
     scene.add(z2);
 
-    // Արևմուտք
     const z3 = new THREE.Mesh(
       new THREE.BoxGeometry(inter.hw * 0.8, 0.07, stripeW),
       crosswalkMat
@@ -597,7 +649,6 @@ intersections.forEach(inter => {
     z3.position.set(inter.x - inter.hw - 1.5, 0.07, inter.z + offset);
     scene.add(z3);
 
-    // Արևելք
     const z4 = new THREE.Mesh(
       new THREE.BoxGeometry(inter.hw * 0.8, 0.07, stripeW),
       crosswalkMat
@@ -609,14 +660,10 @@ intersections.forEach(inter => {
 
 // ========== STREET LIGHTS ==========
 const poleMat = new THREE.MeshStandardMaterial({
-  color: 0x2a2a2a,
-  roughness: 0.7,
-  metalness: 0.5
+  color: 0x2a2a2a, roughness: 0.7, metalness: 0.5
 });
 const lampMat = new THREE.MeshStandardMaterial({
-  color: 0xfff2cc,
-  emissive: 0xffdd88,
-  emissiveIntensity: 0.6
+  color: 0xfff2cc, emissive: 0xffdd88, emissiveIntensity: 0.6
 });
 
 intersections.forEach(inter => {
@@ -627,7 +674,7 @@ intersections.forEach(inter => {
     { dx: 1, dz: 1 }
   ];
 
-   corners.forEach(c => {
+  corners.forEach(c => {
     const px = inter.x + c.dx * (inter.hw + 1.2);
     const pz = inter.z + c.dz * (inter.hh + 1.2);
 
@@ -649,11 +696,7 @@ intersections.forEach(inter => {
 });
 
 /* ============================================================
-   ՄԱՍ 4 — BUILDINGS + LANDMARKS (ՃՇՏՏՎԱԾ)
-   ============================================================ */
-
-/* ============================================================
-   ՄԱՍ 4 — BUILDINGS + LANDMARKS (ՀԱՄԱՊԱՏԱՍԽԱՆ ՄԱՍ 3-ԻՆ)
+   ՄԱՍ 4 — BUILDINGS + LANDMARKS (ՎԵՐՋՆԱԿԱՆ)
    ============================================================ */
 
 // ========== BUILDING COLORS ==========
@@ -665,8 +708,12 @@ const buildingColors = [
 
 const roofColors = [0x8b5a3c, 0x6b4423, 0x7a5c3f, 0x5c4033];
 
-// Կոլիզիայի տվյալներ
+// ========== COLLISION ARRAYS ==========
+// Շենքերի կոլիզիայի տվյալներ
 const buildings = [];
+
+// Landmark-ների կոլիզիայի տվյալներ (առանձին)
+const landmarks = [];
 
 // ========== BUILDING FACTORY ==========
 function addBuilding(x, z, w, d, h) {
@@ -767,24 +814,17 @@ function addBuilding(x, z, w, d, h) {
 }
 
 // ========== GENERATE BUILDINGS IN BLOCKS ==========
-// ⚠️ ԿԱՐԵՎՈՐ՝ Բլոկների կոորդինատները ՀԱՄԱՊԱՏԱՍԽԱՆ են Մաս 3-ի փողոցներին։
-//
-// Մաս 3-ի փողոցների սահմանները՝
-//   X: -7..7 (avenue), -41..-31 (main), -75..-68 (small),
-//      31..41 (main), 68..75 (small)
-//   Z: նույնը
-//
-// Այստեղից բլոկները (փողոցների միջև)՝
-//   X: -100..-75, -68..-41, -31..-7, 7..31, 41..68, 75..100
-//   Z: նույնը
+// Բլոկները համապատասխան են ՄԱՍ 3-ի փողոցներին։
+// X: -100..-75, -68..-41, -31..-7, 7..31, 41..68, 75..100
+// Z: նույնը
 
 const BLOCK_X = [
-  { min: -100, max: -75 },   // 25մ լայն
-  { min: -68,  max: -41 },   // 27մ լայն
-  { min: -31,  max: -7  },   // 24մ լայն
-  { min: 7,    max: 31  },   // 24մ լայն
-  { min: 41,   max: 68  },   // 27մ լայն
-  { min: 75,   max: 100 }    // 25մ լայն
+  { min: -100, max: -75 },
+  { min: -68,  max: -41 },
+  { min: -31,  max: -7  },
+  { min: 7,    max: 31  },
+  { min: 41,   max: 68  },
+  { min: 75,   max: 100 }
 ];
 
 const BLOCK_Z = [
@@ -796,9 +836,25 @@ const BLOCK_Z = [
   { min: 75,   max: 100 }
 ];
 
-// Ամեն բլոկի մեջ դնում ենք 1 կամ 2 շենք
+// ⚠️ Landmark-ների բլոկները բաց թողնելու համար
+// Cascade → (7..31, 7..31)
+// Opera   → (-68..-41, 41..68)
+// Matenadaran → (41..68, -68..-41)
+function isLandmarkBlock(bx, bz) {
+  // Cascade
+  if (bx.min === 7 && bx.max === 31 && bz.min === 7 && bz.max === 31) return true;
+  // Opera
+  if (bx.min === -68 && bx.max === -41 && bz.min === 41 && bz.max === 68) return true;
+  // Matenadaran
+  if (bx.min === 41 && bx.max === 68 && bz.min === -68 && bz.max === -41) return true;
+  return false;
+}
+
 BLOCK_X.forEach(bx => {
   BLOCK_Z.forEach(bz => {
+    // Բաց թողնում ենք landmark-ների բլոկները
+    if (isLandmarkBlock(bx, bz)) return;
+
     const blockW = bx.max - bx.min;
     const blockD = bz.max - bz.min;
 
@@ -807,21 +863,18 @@ BLOCK_X.forEach(bx => {
     const cx = (bx.min + bx.max) / 2;
     const cz = (bz.min + bz.max) / 2;
 
-    // Մայթերից հետո տարածություն (margin)
     const margin = 2;
     const usableW = blockW - margin * 2;
     const usableD = blockD - margin * 2;
 
     if (usableW < 4 || usableD < 4) return;
 
-    // 70% հավանականությամբ 1 մեծ շենք, 30%՝ 2 փոքր
     if (Math.random() < 0.7) {
       const bw = usableW * 0.9;
       const bd = usableD * 0.9;
       const h = 8 + Math.random() * 14;
       addBuilding(cx, cz, bw, bd, h);
     } else {
-      // 2 շենք կողք-կողքի (X առանցքով)
       const bw = usableW * 0.42;
       const bd = usableD * 0.9;
       const h1 = 6 + Math.random() * 10;
@@ -833,8 +886,12 @@ BLOCK_X.forEach(bx => {
   });
 });
 
-// ========== LANDMARK: CASCADE ==========
-// Կասկադ — կենտրոնական բլոկի մեջ (7..31, 7..31)
+// ============================================================
+// LANDMARK 1 — CASCADE (Կասկադ)
+// ============================================================
+// Գտնվում է կենտրոնական բլոկում (7..31, 7..31)
+// 6 աստիճան, ամեն մեկը 20մ լայն, 3մ խոր, 2.5մ բարձր
+
 (function addCascade() {
   const baseX = 19;
   const baseZ = 19;
@@ -873,17 +930,22 @@ BLOCK_X.forEach(bx => {
     const railR = railL.clone();
     railR.position.x = baseX + stepW / 2 - 0.3;
     scene.add(railR);
-  }
 
-  buildings.push({
-    x: baseX, z: baseZ, w: 20, d: 20, h: 15,
-    minX: baseX - 10, maxX: baseX + 10,
-    minZ: baseZ - 10, maxZ: baseZ + 10
-  });
+    // ✅ Ճշգրիտ collider ամեն աստիճանի համար
+    landmarks.push({
+      minX: baseX - stepW / 2,
+      maxX: baseX + stepW / 2,
+      minZ: baseZ - 8 + i * stepD - stepD / 2,
+      maxZ: baseZ - 8 + i * stepD + stepD / 2
+    });
+  }
 })();
 
-// ========== LANDMARK: OPERA HOUSE ==========
-// Օպերա — ձախ-ներքև բլոկ (-68..-41, 41..68)
+// ============================================================
+// LANDMARK 2 — OPERA (Օպերա)
+// ============================================================
+// Գտնվում է ձախ-ներքև բլոկում (-68..-41, 41..68)
+
 (function addOpera() {
   const x = -54;
   const z = 54;
@@ -905,15 +967,20 @@ BLOCK_X.forEach(bx => {
   dome.castShadow = true;
   scene.add(dome);
 
-  buildings.push({
-    x, z, w: 20, d: 20, h: 13,
-    minX: x - 10, maxX: x + 10,
-    minZ: z - 10, maxZ: z + 10
+  // ✅ Ճշգրիտ collider (շրջանագիծը որպես քառակուսի մոտարկում)
+  landmarks.push({
+    minX: x - 10,
+    maxX: x + 10,
+    minZ: z - 10,
+    maxZ: z + 10
   });
 })();
 
-// ========== LANDMARK: MATENADARAN ==========
-// Մատենադարան — աջ-վերև բլոկ (41..68, -68..-41)
+// ============================================================
+// LANDMARK 3 — MATENADARAN (Մատենադարան)
+// ============================================================
+// Գտնվում է աջ-վերև բլոկում (41..68, -68..-41)
+
 (function addMatenadaran() {
   const x = 54;
   const z = -54;
@@ -938,27 +1005,25 @@ BLOCK_X.forEach(bx => {
     scene.add(col);
   }
 
-  buildings.push({
-    x, z, w: 18, d: 14, h: 8,
-    minX: x - 9, maxX: x + 9,
-    minZ: z - 7, maxZ: z + 7
+  // ✅ Ճշգրիտ collider (միայն հիմնական մասը, սյուները բաց են)
+  landmarks.push({
+    minX: x - 9,
+    maxX: x + 9,
+    minZ: z - 7,
+    maxZ: z + 7
   });
 })();
 
-// === ՄԱՍ 5-ը կցվում է այստեղ ===
-
 /* ============================================================
-   ՄԱՍ 5 — SAMAKAT MODEL + INDIAN COURIER
+   ՄԱՍ 5 — SAMAKAT MODEL + INDIAN COURIER (ՎԵՐՋՆԱԿԱՆ)
    ============================================================ */
 
 // ========== PLAYER GROUP ==========
-// Ամբողջ խաղացողը (սամակատ + առաքիչ) մեկ Group-ի մեջ
 const player = new THREE.Group();
 player.position.set(0, 0, 20);
 scene.add(player);
 
 // ========== SAMAKAT BODY ==========
-// Սամակատի հիմնական մարմինը (կարմիր-նարնջագույն)
 const bodyMat = new THREE.MeshStandardMaterial({
   color: 0xff6b35,
   roughness: 0.5,
@@ -974,7 +1039,6 @@ body.castShadow = true;
 body.receiveShadow = true;
 player.add(body);
 
-// Առջևի կլոր մաս (շարժիչի ծածկ)
 const hood = new THREE.Mesh(
   new THREE.BoxGeometry(1.6, 0.7, 1.0),
   bodyMat
@@ -983,7 +1047,6 @@ hood.position.set(0, 0.75, 1.3);
 hood.castShadow = true;
 player.add(hood);
 
-// Հետևի բեռնախցիկ
 const trunk = new THREE.Mesh(
   new THREE.BoxGeometry(1.7, 0.8, 1.0),
   bodyMat
@@ -993,7 +1056,6 @@ trunk.castShadow = true;
 player.add(trunk);
 
 // ========== CABIN ==========
-// Խցիկ (վարորդի տեղ)
 const cabinMat = new THREE.MeshStandardMaterial({
   color: 0xffaa55,
   roughness: 0.6,
@@ -1008,7 +1070,7 @@ cabin.position.set(0, 1.6, -0.2);
 cabin.castShadow = true;
 player.add(cabin);
 
-// Առջևի ապակի (կիսաթափանցիկ)
+// ========== GLASS ==========
 const glassMat = new THREE.MeshStandardMaterial({
   color: 0x88ccff,
   transparent: true,
@@ -1024,7 +1086,6 @@ const windshield = new THREE.Mesh(
 windshield.position.set(0, 1.7, 0.62);
 player.add(windshield);
 
-// Կողային ապակիներ
 const sideGlassL = new THREE.Mesh(
   new THREE.BoxGeometry(0.1, 0.7, 1.3),
   glassMat
@@ -1052,10 +1113,10 @@ const wheelGeo = new THREE.CylinderGeometry(0.45, 0.45, 0.35, 16);
 const rimGeo = new THREE.CylinderGeometry(0.22, 0.22, 0.37, 12);
 
 const wheelPositions = [
-  { x: -0.95, z: 1.15 },  // Front Left
-  { x: 0.95, z: 1.15 },   // Front Right
-  { x: -0.95, z: -1.15 }, // Rear Left
-  { x: 0.95, z: -1.15 }   // Rear Right
+  { x: -0.95, z: 1.15 },
+  { x: 0.95, z: 1.15 },
+  { x: -0.95, z: -1.15 },
+  { x: 0.95, z: -1.15 }
 ];
 
 const wheels = [];
@@ -1075,7 +1136,7 @@ wheelPositions.forEach(pos => {
   wheels.push(wheel);
 });
 
-// ========== HEADLIGHT ==========
+// ========== HEADLIGHTS ==========
 const headlightMat = new THREE.MeshStandardMaterial({
   color: 0xffffcc,
   emissive: 0xffee88,
@@ -1093,7 +1154,7 @@ const headlightR = headlightL.clone();
 headlightR.position.x = 0.55;
 player.add(headlightR);
 
-// ========== TAILLIGHT ==========
+// ========== TAILLIGHTS ==========
 const taillightMat = new THREE.MeshStandardMaterial({
   color: 0xff3333,
   emissive: 0xaa0000,
@@ -1112,9 +1173,6 @@ taillightR.position.x = 0.55;
 player.add(taillightR);
 
 // ========== COURIER (INDIAN DRIVER) ==========
-// Հնդիկ առաքիչը նստած է սամակատի վրա
-
-// --- Torso ---
 const skinMat = new THREE.MeshStandardMaterial({
   color: 0x8b5a2b,
   roughness: 0.8
@@ -1133,7 +1191,6 @@ torso.position.set(0, 2.4, -0.2);
 torso.castShadow = true;
 player.add(torso);
 
-// --- Head ---
 const head = new THREE.Mesh(
   new THREE.BoxGeometry(0.6, 0.6, 0.6),
   skinMat
@@ -1142,7 +1199,6 @@ head.position.set(0, 3.2, -0.2);
 head.castShadow = true;
 player.add(head);
 
-// --- Turban (հնդկական չալմա) ---
 const turbanMat = new THREE.MeshStandardMaterial({
   color: 0xff9933,
   roughness: 0.7
@@ -1156,7 +1212,6 @@ turban.position.set(0, 3.5, -0.2);
 turban.castShadow = true;
 player.add(turban);
 
-// --- Eyes ---
 const eyeMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
 const eyeL = new THREE.Mesh(
   new THREE.SphereGeometry(0.06, 8, 8),
@@ -1169,7 +1224,6 @@ const eyeR = eyeL.clone();
 eyeR.position.x = 0.15;
 player.add(eyeR);
 
-// --- Arms (ղեկը բռնած) ---
 const armGeo = new THREE.BoxGeometry(0.25, 0.25, 0.9);
 const armL = new THREE.Mesh(armGeo, skinMat);
 armL.position.set(-0.55, 2.4, 0.2);
@@ -1180,7 +1234,6 @@ const armR = armL.clone();
 armR.position.x = 0.55;
 player.add(armR);
 
-// --- Hands on steering ---
 const handGeo = new THREE.SphereGeometry(0.15, 8, 8);
 const handL = new THREE.Mesh(handGeo, skinMat);
 handL.position.set(-0.5, 2.3, 0.65);
@@ -1190,7 +1243,6 @@ const handR = handL.clone();
 handR.position.x = 0.5;
 player.add(handR);
 
-// --- Steering wheel ---
 const steerMat = new THREE.MeshStandardMaterial({
   color: 0x1a1a1a,
   roughness: 0.5
@@ -1205,7 +1257,6 @@ steering.rotation.x = -0.5;
 player.add(steering);
 
 // ========== DELIVERY BAG ==========
-// Առաքման պայուսակ մեջքին
 const bagMat = new THREE.MeshStandardMaterial({
   color: 0xdd3333,
   roughness: 0.7
@@ -1219,7 +1270,6 @@ bag.position.set(0, 2.4, -0.75);
 bag.castShadow = true;
 player.add(bag);
 
-// Պայուսակի կափարիչ
 const bagFlap = new THREE.Mesh(
   new THREE.BoxGeometry(0.9, 0.15, 0.55),
   new THREE.MeshStandardMaterial({ color: 0xaa2222, roughness: 0.7 })
@@ -1227,7 +1277,6 @@ const bagFlap = new THREE.Mesh(
 bagFlap.position.set(0, 2.9, -0.75);
 player.add(bagFlap);
 
-// Պայուսակի логотип (դեղին քառակուսի)
 const bagLogo = new THREE.Mesh(
   new THREE.BoxGeometry(0.4, 0.4, 0.02),
   new THREE.MeshStandardMaterial({
@@ -1240,7 +1289,6 @@ bagLogo.position.set(0, 2.4, -1.01);
 player.add(bagLogo);
 
 // ========== SHADOW BLOB ==========
-// Ստվեր մեքենայի տակ (լրացուցիչ էֆեկտ)
 const shadowBlob = new THREE.Mesh(
   new THREE.CircleGeometry(1.6, 16),
   new THREE.MeshBasicMaterial({
@@ -1253,135 +1301,123 @@ shadowBlob.rotation.x = -Math.PI / 2;
 shadowBlob.position.y = 0.02;
 player.add(shadowBlob);
 
-// ========== PLAYER STATE ==========
-// Խաղացողի ֆիզիկական վիճակը
+// ============================================================
+// PLAYER STATE — Ֆիզիկական վիճակ
+// ============================================================
+//
+// ⚠️ ԿՈՈՐԴԻՆԱՏՆԵՐԻ ՀԱՄԱԿԱՐԳ
+//
+// heading = 0 → forward = +Z
+// heading = π/2 → forward = +X
+// heading = π → forward = -Z
+// heading = -π/2 → forward = -X
+//
+// A (ձախ սեղմում) → heading-ը ԱՃՈՒՄ է (+)
+// D (աջ սեղմում) → heading-ը ՆՎԱԶՈՒՄ է (-)
+
 const playerState = {
-  speed: 0,          // ընթացիկ արագություն (մ/վ)
-  maxSpeed: 22,      // առավելագույն արագություն
-  reverseSpeed: 8,   // հետընթաց արագություն
-  acceleration: 18,  // արագացում
-  brakeForce: 30,    // արգելակման ուժ
-  friction: 4,       // շփում
-  turnSpeed: 2.2,    // շրջադարձի արագություն
-  heading: 0,        // ուղղություն (ռադիան)
-  drift: 0           // սահքի էֆեկտ
+  speed: 0,                    // ընթացիկ արագություն (մ/վ)
+  maxSpeed: 22,                // առավելագույն արագություն
+  reverseSpeed: 8,             // հետընթաց արագություն
+  acceleration: 16,            // արագացում
+  brakeForce: 28,              // արգելակման ուժ
+  friction: 4.5,               // շփում (բնական դանդաղում)
+  turnSpeed: 1.6,              // ⚠️ շրջադարձի արագություն (փոքրացված 2.2-ից)
+  heading: 0,                  // ուղղություն (ռադիան)
+  angularVelocity: 0,          // ⚠️ անկյունային արագություն (իներցիա)
+  drift: 0,                    // սահքի էֆեկտ
+  maxAngularVelocity: 1.4,     // ⚠️ առավելագույն անկյունային արագություն
+  angularAccel: 5.0,           // ⚠️ անկյունային արագացում (սահուն անցում)
+  angularDamping: 3.5          // ⚠️ անկյունային մարում (երբ բաց ենք թողնում)
 };
 
-// === ՄԱՍ 6-ը կցվում է այստեղ ===
-
- /* ============================================================
-   ՄԱՍ 6 — PHYSICS + INPUT + COLLISION
+/* ============================================================
+   ՄԱՍ 6 — INPUT + COLLISION + PHYSICS + CAMERA (ՎԵՐՋՆԱԿԱՆ)
    ============================================================ */
 
-// ========== KEYBOARD INPUT ==========
-const keys = {
-  forward: false,
-  backward: false,
-  left: false,
-  right: false,
-  handbrake: false
-};
+// ============================================================
+// KEYBOARD INPUT
+// ============================================================
+
+const keys = {};
 
 window.addEventListener('keydown', (e) => {
-  switch (e.code) {
-    case 'KeyW':
-    case 'ArrowUp':
-      keys.forward = true;
-      break;
-    case 'KeyS':
-    case 'ArrowDown':
-      keys.backward = true;
-      break;
-    case 'KeyA':
-    case 'ArrowLeft':
-      keys.left = true;
-      break;
-    case 'KeyD':
-    case 'ArrowRight':
-      keys.right = true;
-      break;
-    case 'Space':
-      keys.handbrake = true;
-      e.preventDefault();
-      break;
+  keys[e.code] = true;
+
+  if (
+    e.code === 'Space' ||
+    e.code === 'ArrowUp' ||
+    e.code === 'ArrowDown' ||
+    e.code === 'ArrowLeft' ||
+    e.code === 'ArrowRight'
+  ) {
+    e.preventDefault();
   }
 });
 
 window.addEventListener('keyup', (e) => {
-  switch (e.code) {
-    case 'KeyW':
-    case 'ArrowUp':
-      keys.forward = false;
-      break;
-    case 'KeyS':
-    case 'ArrowDown':
-      keys.backward = false;
-      break;
-    case 'KeyA':
-    case 'ArrowLeft':
-      keys.left = false;
-      break;
-    case 'KeyD':
-    case 'ArrowRight':
-      keys.right = false;
-      break;
-    case 'Space':
-      keys.handbrake = false;
-      break;
+  keys[e.code] = false;
+});
+
+// ⚠️ Մաքրում ենք ստեղները, երբ պատուհանը կորցնում է focus-ը
+window.addEventListener('blur', () => {
+  for (const k in keys) keys[k] = false;
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    for (const k in keys) keys[k] = false;
   }
 });
 
-// ========== COLLISION DETECTION ==========
-// Սամակատի մոտավոր շառավիղը
-const PLAYER_RADIUS = 1.4;
+// ============================================================
+// COLLISION CHECK
+// ============================================================
 
-// Ստուգում է, արդյոք դիրքը բախվում է որևէ շենքի
-function checkCollision(x, z) {
+function checkCollision(x, z, radius = 1.15) {
+  // Շենքեր
   for (const b of buildings) {
-    // AABB + շրջան collision
     const closestX = Math.max(b.minX, Math.min(x, b.maxX));
     const closestZ = Math.max(b.minZ, Math.min(z, b.maxZ));
     const dx = x - closestX;
     const dz = z - closestZ;
-    const distSq = dx * dx + dz * dz;
-
-    if (distSq < PLAYER_RADIUS * PLAYER_RADIUS) {
-      return b; // բախվում է
-    }
+    if ((dx * dx + dz * dz) < radius * radius) return true;
   }
-  return null;
+
+  // ⚠️ Landmark-ներ (Cascade, Opera, Matenadaran)
+  for (const b of landmarks) {
+    const closestX = Math.max(b.minX, Math.min(x, b.maxX));
+    const closestZ = Math.max(b.minZ, Math.min(z, b.maxZ));
+    const dx = x - closestX;
+    const dz = z - closestZ;
+    if ((dx * dx + dz * dz) < radius * radius) return true;
+  }
+
+  return false;
 }
 
-// Գտնում է ամենամոտ ազատ դիրքը բախման ժամանակ
-function resolveCollision(oldX, oldZ, newX, newZ) {
-  // Փորձում ենք նոր դիրքը
-  if (!checkCollision(newX, newZ)) {
-    return { x: newX, z: newZ };
-  }
+// ============================================================
+// PHYSICS
+// ============================================================
 
-  // Փորձում ենք միայն X-ով շարժվել
-  if (!checkCollision(newX, oldZ)) {
-    return { x: newX, z: oldZ };
-  }
-
-  // Փորձում ենք միայն Z-ով շարժվել
-  if (!checkCollision(oldX, newZ)) {
-    return { x: oldX, z: newZ };
-  }
-
-  // Ամեն ինչ բախվում է — մնում ենք տեղում
-  return { x: oldX, z: oldZ };
-}
-
-// ========== PHYSICS UPDATE ==========
 function updatePhysics(dt) {
-  // --- Acceleration / Braking ---
-  if (keys.forward) {
+  // ---------- INPUT ----------
+  const accelerating = keys['KeyW'] || keys['ArrowUp'];
+  const braking = keys['KeyS'] || keys['ArrowDown'];
+  const steeringLeft = keys['KeyA'] || keys['ArrowLeft'];
+  const steeringRight = keys['KeyD'] || keys['ArrowRight'];
+  const handbrake = keys['Space'];
+
+  // ---------- ACCELERATION ----------
+  if (accelerating) {
     playerState.speed += playerState.acceleration * dt;
-  } else if (keys.backward) {
-    playerState.speed -= playerState.acceleration * dt;
+  } else if (braking) {
+    if (playerState.speed > 0) {
+      playerState.speed -= playerState.brakeForce * dt;
+    } else {
+      playerState.speed -= playerState.acceleration * 0.55 * dt;
+    }
   } else {
-    // Friction — աստիճանաբար կանգ է առնում
     if (playerState.speed > 0) {
       playerState.speed -= playerState.friction * dt;
       if (playerState.speed < 0) playerState.speed = 0;
@@ -1391,129 +1427,198 @@ function updatePhysics(dt) {
     }
   }
 
-  // --- Handbrake ---
-  if (keys.handbrake) {
-    if (playerState.speed > 0) {
-      playerState.speed -= playerState.brakeForce * dt;
-      if (playerState.speed < 0) playerState.speed = 0;
-    } else if (playerState.speed < 0) {
-      playerState.speed += playerState.brakeForce * dt;
-      if (playerState.speed > 0) playerState.speed = 0;
+  playerState.speed = THREE.MathUtils.clamp(
+    playerState.speed,
+    -playerState.reverseSpeed,
+    playerState.maxSpeed
+  );
+
+  // ---------- TURNING (ԻՆԵՐՑԻԱՅՈՎ) ----------
+  //
+  // ⚠️ ՈՒՂՂՎԱԾ ՆՇԱՆԸ.
+  // A (ձախ) → turnInput = +1 → heading-ը աճում է → մեքենան +X ուղղությամբ
+  //    Երբ հետևից ենք նայում (+Z-ից -Z), +X-ը ձախ է ✅
+  // D (աջ)  → turnInput = -1 → heading-ը նվազում է → մեքենան -X ուղղությամբ
+  //    -X-ը աջ է ✅
+  let turnInput = 0;
+  if (steeringLeft) turnInput += 1;
+  if (steeringRight) turnInput -= 1;
+
+  const speedAbs = Math.abs(playerState.speed);
+  const canTurn = speedAbs > 0.15;
+
+  if (canTurn && turnInput !== 0) {
+    // Արագության ազդեցությունը շրջադարձի վրա
+    const speedFactor = THREE.MathUtils.clamp(
+      speedAbs / playerState.maxSpeed,
+      0.35,
+      1.0
+    );
+
+    // Ցանկալի angular velocity
+    const targetAngularVel =
+      turnInput * playerState.turnSpeed * speedFactor;
+
+    // Հետընթացի ժամանակ ուղղությունը հակառակ է
+    const sign = playerState.speed < 0 ? -1 : 1;
+
+    // Սահուն արագացում դեպի ցանկալի արժեքը (իներցիա)
+    playerState.angularVelocity = THREE.MathUtils.lerp(
+      playerState.angularVelocity,
+      targetAngularVel * sign,
+      playerState.angularAccel * dt
+    );
+  } else {
+    // Երբ չենք սեղմում — սահուն մարում է
+    playerState.angularVelocity = THREE.MathUtils.lerp(
+      playerState.angularVelocity,
+      0,
+      playerState.angularDamping * dt
+    );
+  }
+
+  // Սահմանափակում
+  playerState.angularVelocity = THREE.MathUtils.clamp(
+    playerState.angularVelocity,
+    -playerState.maxAngularVelocity,
+    playerState.maxAngularVelocity
+  );
+
+  // Կիրառում heading-ին
+  playerState.heading += playerState.angularVelocity * dt;
+
+  // ---------- HANDBRAKE ----------
+  if (handbrake) {
+    playerState.speed *= Math.pow(0.04, dt);
+    playerState.drift = THREE.MathUtils.lerp(playerState.drift, 1, 8 * dt);
+  } else {
+    playerState.drift = THREE.MathUtils.lerp(playerState.drift, 0, 6 * dt);
+  }
+
+  // ---------- MOVEMENT ----------
+  const distance = playerState.speed * dt;
+  const forwardX = Math.sin(playerState.heading);
+  const forwardZ = Math.cos(playerState.heading);
+
+  const newX = player.position.x + forwardX * distance;
+  const newZ = player.position.z + forwardZ * distance;
+
+  // ---------- COLLISION + WALL SLIDING ----------
+  if (!checkCollision(newX, newZ)) {
+    // Ազատ ճանապարհ
+    player.position.x = newX;
+    player.position.z = newZ;
+  } else {
+    // Փորձենք միայն X-ով
+    const tryX = player.position.x + forwardX * distance;
+    const tryZ = player.position.z;
+
+    // Փորձենք միայն Z-ով
+    const tryX2 = player.position.x;
+    const tryZ2 = player.position.z + forwardZ * distance;
+
+    if (!checkCollision(tryX, tryZ)) {
+      // Սահում ենք պատի երկայնքով (X-ով)
+      player.position.x = tryX;
+      playerState.speed *= 0.6;
+    } else if (!checkCollision(tryX2, tryZ2)) {
+      // Սահում ենք պատի երկայնքով (Z-ով)
+      player.position.z = tryZ2;
+      playerState.speed *= 0.6;
+    } else {
+      // Ամբողջովին արգելափակված
+      playerState.speed *= -0.15;
     }
   }
 
-  // --- Speed limits ---
-  if (playerState.speed > playerState.maxSpeed) {
-    playerState.speed = playerState.maxSpeed;
-  }
-  if (playerState.speed < -playerState.reverseSpeed) {
-    playerState.speed = -playerState.reverseSpeed;
-  }
-
-  // --- Steering ---
-  // Արագության հետ կապված՝ դանդաղ ժամանակ ավելի դժվար շրջադարձ
-  const speedFactor = Math.min(Math.abs(playerState.speed) / 8, 1);
-  const turnAmount = playerState.turnSpeed * dt * speedFactor;
-
-  if (keys.left) {
-    playerState.heading += turnAmount;
-  }
-  if (keys.right) {
-    playerState.heading -= turnAmount;
-  }
-
-  // --- Movement ---
-  const oldX = player.position.x;
-  const oldZ = player.position.z;
-
-  const dx = Math.sin(playerState.heading) * playerState.speed * dt;
-  const dz = Math.cos(playerState.heading) * playerState.speed * dt;
-
-  const newX = oldX + dx;
-  const newZ = oldZ + dz;
-
-  // --- Collision resolution ---
-  const resolved = resolveCollision(oldX, oldZ, newX, newZ);
-
-  // Եթե բախվել է, արագությունը կտրուկ իջնում է
-  if (resolved.x !== newX || resolved.z !== newZ) {
-    playerState.speed *= 0.3;
-  }
-
-  player.position.x = resolved.x;
-  player.position.z = resolved.z;
-
-  // --- Apply rotation ---
+  // ---------- PLAYER ROTATION ----------
   player.rotation.y = playerState.heading;
 
-  // --- Wheel rotation ---
-  const wheelRotation = playerState.speed * dt * 2;
-  wheels.forEach(w => {
-    w.rotation.x += wheelRotation;
+  // ---------- WHEEL ROTATION ----------
+  // ⚠️ ՈՒՂՂՎԱԾ. Անիվները դրված են rotation.z = π/2-ով (կողքի վրա),
+  // դրա համար գլորվելու համար պետք է պտտել rotation.y-ով։
+  const wheelRotation = playerState.speed * dt * 2.5;
+  wheels.forEach(wheel => {
+    wheel.rotation.x += wheelRotation;
   });
 
-  // --- World boundaries ---
-  const BOUND = 105;
-  if (player.position.x > BOUND) player.position.x = BOUND;
-  if (player.position.x < -BOUND) player.position.x = -BOUND;
-  if (player.position.z > BOUND) player.position.z = BOUND;
-  if (player.position.z < -BOUND) player.position.z = -BOUND;
-}
-
-// ========== CAMERA FOLLOW ==========
-function updateCamera(dt) {
-  // Թիրախ դիրքը՝ խաղացողից հետ CAM_OFFSET-ով
-  const targetPos = new THREE.Vector3(
-    player.position.x + CAM_OFFSET.x,
-    CAM_OFFSET.y,
-    player.position.z + CAM_OFFSET.z
-  );
-
-  // Հարթ հետևում (lerp)
-  const lerpFactor = 1 - Math.pow(0.001, dt);
-  camera.position.lerp(targetPos, lerpFactor);
-
-  // Նայում է խաղացողի ուղղությամբ
-  const lookAt = new THREE.Vector3(
-    player.position.x + CAM_LOOK_OFFSET.x,
-    0,
-    player.position.z + CAM_LOOK_OFFSET.z
-  );
-  camera.lookAt(lookAt);
-
-  // Արևը հետևում է խաղացողին (ստվերները միշտ աշխատեն)
-  sun.position.set(
-    player.position.x + 60,
-    90,
-    player.position.z + 40
-  );
+  // ---------- SUN FOLLOW PLAYER ----------
   sunTarget.position.copy(player.position);
+  sun.position.copy(player.position).add(SUN_OFFSET);
 }
 
-// ========== SPEED DISPLAY UPDATE ==========
+// ============================================================
+// CHASE CAMERA (ՄԻՇՏ ՀԵՏԵՎԻՑ)
+// ============================================================
+
+const camLookAt = new THREE.Vector3();
+const camDesiredPos = new THREE.Vector3();
+const camDesiredLook = new THREE.Vector3();
+let camInitialized = false;
+
+function updateCamera(dt) {
+  const h = playerState.heading;
+  const forwardX = Math.sin(h);
+  const forwardZ = Math.cos(h);
+
+  // Տեսախցիկը կանգնում է մեքենայի ՀԵՏԵՎՈՒՄ
+  camDesiredPos.set(
+    player.position.x - forwardX * CAM_DISTANCE,
+    player.position.y + CAM_HEIGHT,
+    player.position.z - forwardZ * CAM_DISTANCE
+  );
+
+  // Նայում է մեքենայից ԱՌԱՋ
+  camDesiredLook.set(
+    player.position.x + forwardX * CAM_LOOK_AHEAD,
+    player.position.y + 1.5,
+    player.position.z + forwardZ * CAM_LOOK_AHEAD
+  );
+
+  // Սահուն lerp
+  const posLerp = 1 - Math.exp(-CAM_SMOOTH_POS * dt);
+  const lookLerp = 1 - Math.exp(-CAM_SMOOTH_LOOK * dt);
+
+  camera.position.lerp(camDesiredPos, posLerp);
+
+  if (!camInitialized) {
+    camLookAt.copy(camDesiredLook);
+    camInitialized = true;
+  } else {
+    camLookAt.lerp(camDesiredLook, lookLerp);
+  }
+  camera.lookAt(camLookAt);
+}
+
+// ============================================================
+// SPEED DISPLAY (DOM throttle)
+// ============================================================
+
 const speedNumEl = document.getElementById('speedNum');
+let lastSpeedKmh = -1;
 
 function updateSpeedDisplay() {
-  // մ/վ → կմ/ժ
-  const kmh = Math.abs(playerState.speed) * 3.6;
-  speedNumEl.textContent = Math.round(kmh);
+  const kmh = Math.round(Math.abs(playerState.speed) * 3.6);
+  if (kmh !== lastSpeedKmh) {
+    speedNumEl.textContent = kmh;
+    lastSpeedKmh = kmh;
+  }
 }
 
-// === ՄԱՍ 7-ը կցվում է այստեղ ===
-
- /* ============================================================
-   ՄԱՍ 7 — DELIVERY MISSION SYSTEM
+/* ============================================================
+   ՄԱՍ 7 — DELIVERY MISSION SYSTEM (ՎԵՐՋՆԱԿԱՆ)
    ============================================================ */
 
 // ========== MISSION STATE ==========
-const mission = {
+const missionState = {
   phase: 'pickup',        // 'pickup' | 'deliver'
   pickupPoint: null,      // { x, z }
   deliverPoint: null,     // { x, z }
   pickupMarker: null,     // Three.js mesh
   deliverMarker: null,    // Three.js mesh
-  pickupRadius: 3.5,
-  deliverRadius: 3.5
+  pickupRadius: 4.0,      // ⚠️ 3.5 → 4.0
+  deliverRadius: 4.0,
+  locked: false           // ⚠️ ՆՈՐ — կրկնակի completeDelivery-ից խուսափելու համար
 };
 
 // ========== GAME STATE ==========
@@ -1525,8 +1630,7 @@ const gameState = {
 };
 
 // ========== MARKER FACTORY ==========
-// Ցուցիչ ստեղծող ֆունկցիա — վերցնում/հանձնելու կետ
-function createMarker(color, icon) {
+function createMarker(color) {
   const group = new THREE.Group();
 
   // Հիմքի շրջան
@@ -1542,7 +1646,7 @@ function createMarker(color, icon) {
   ring.position.y = 0.15;
   group.add(ring);
 
-  // Ներքին շրջան (թափանցիկ)
+  // Ներքին շրջան
   const discGeo = new THREE.CircleGeometry(2.5, 32);
   const discMat = new THREE.MeshBasicMaterial({
     color,
@@ -1555,7 +1659,7 @@ function createMarker(color, icon) {
   disc.position.y = 0.12;
   group.add(disc);
 
-  // Ուղղահայաց սյուն (լույսի ճառագայթ)
+  // Ուղղահայաց ճառագայթ
   const beamGeo = new THREE.CylinderGeometry(0.4, 0.4, 12, 12, 1, true);
   const beamMat = new THREE.MeshBasicMaterial({
     color,
@@ -1567,7 +1671,7 @@ function createMarker(color, icon) {
   beam.position.y = 6;
   group.add(beam);
 
-  // Իկոն (փոքրիկ գնդիկ վերևում)
+  // Իկոն
   const iconGeo = new THREE.SphereGeometry(0.7, 16, 16);
   const iconMat = new THREE.MeshStandardMaterial({
     color,
@@ -1586,12 +1690,13 @@ function createMarker(color, icon) {
 }
 
 // ========== RANDOM POSITION IN STREETS ==========
-// Պատահական դիրք փողոցների վրա (շենքերից դուրս)
-function getRandomStreetPosition() {
-  const attempts = 50;
+// ⚠️ Օգտագործում ենք ավելի մեծ radius, որ մարկերը չհայտնվի
+// շենքի պատին կպած
+function getRandomStreetPosition(excludePoint = null) {
+  const attempts = 80;
+  const SAFE_RADIUS = 4.5;
 
   for (let i = 0; i < attempts; i++) {
-    // Ընտրում ենք պատահական փողոց
     const street = STREETS[Math.floor(Math.random() * STREETS.length)];
     const isHorizontal = (street.x2 - street.x1) > (street.z2 - street.z1);
 
@@ -1604,60 +1709,68 @@ function getRandomStreetPosition() {
       z = street.z1 + Math.random() * (street.z2 - street.z1);
     }
 
-    // Ստուգում ենք, որ խաղացողից հեռու լինի
+    // Հեռավորությունը խաղացողից (առնվազն 20մ)
     const dx = x - player.position.x;
     const dz = z - player.position.z;
     const distSq = dx * dx + dz * dz;
+    if (distSq < 400) continue;
 
-    if (distSq < 400) continue; // 20մ-ից ավելի հեռու
+    // ⚠️ Հեռավորությունը excludePoint-ից (առնվազն 20մ)
+    if (excludePoint) {
+      const ex = x - excludePoint.x;
+      const ez = z - excludePoint.z;
+      if ((ex * ex + ez * ez) < 400) continue;
+    }
 
-    // Ստուգում ենք, որ շենք չլինի
-    if (checkCollision(x, z)) continue;
+    // ⚠️ Ստուգում ենք ավելի մեծ radius-ով, որ մարկերը չհպվի շենքին
+    if (checkCollision(x, z, SAFE_RADIUS)) continue;
 
     return { x, z };
   }
 
-  // Fallback — վերադարձնում ենք կենտրոնական փողոցի կետ
+  // Fallback
   return { x: 0, z: 20 };
 }
 
 // ========== START NEW MISSION ==========
 function startNewMission() {
   // Մաքրում ենք հին ցուցիչները
-  if (mission.pickupMarker) {
-    scene.remove(mission.pickupMarker);
-    mission.pickupMarker = null;
+  if (missionState.pickupMarker) {
+    scene.remove(missionState.pickupMarker);
+    missionState.pickupMarker = null;
   }
-  if (mission.deliverMarker) {
-    scene.remove(mission.deliverMarker);
-    mission.deliverMarker = null;
+  if (missionState.deliverMarker) {
+    scene.remove(missionState.deliverMarker);
+    missionState.deliverMarker = null;
   }
 
   // Նոր կետեր
-  mission.pickupPoint = getRandomStreetPosition();
-  mission.deliverPoint = getRandomStreetPosition();
+  missionState.pickupPoint = getRandomStreetPosition();
+  missionState.deliverPoint = getRandomStreetPosition(missionState.pickupPoint);
 
   // Ստեղծում ենք ցուցիչները
-  mission.pickupMarker = createMarker(0x4facfe, 'pickup');
-  mission.pickupMarker.position.set(
-    mission.pickupPoint.x,
+  missionState.pickupMarker = createMarker(0x4facfe);
+  missionState.pickupMarker.position.set(
+    missionState.pickupPoint.x,
     0,
-    mission.pickupPoint.z
+    missionState.pickupPoint.z
   );
-  scene.add(mission.pickupMarker);
+  scene.add(missionState.pickupMarker);
 
-  mission.deliverMarker = createMarker(0xf5576c, 'deliver');
-  mission.deliverMarker.position.set(
-    mission.deliverPoint.x,
+  missionState.deliverMarker = createMarker(0xf5576c);
+  missionState.deliverMarker.position.set(
+    missionState.deliverPoint.x,
     0,
-    mission.deliverPoint.z
+    missionState.deliverPoint.z
   );
   // Սկզբում թաքցնում ենք deliver-ը
-  mission.deliverMarker.visible = false;
-  scene.add(mission.deliverMarker);
+  missionState.deliverMarker.visible = false;
+  scene.add(missionState.deliverMarker);
 
   // Փուլը՝ pickup
-  mission.phase = 'pickup';
+  missionState.phase = 'pickup';
+  missionState.locked = false;  // ⚠️ ապակողպում ենք նոր առաքելության համար
+
   updateMissionUI();
 }
 
@@ -1665,7 +1778,7 @@ function startNewMission() {
 const missionEl = document.getElementById('mission');
 
 function updateMissionUI() {
-  if (mission.phase === 'pickup') {
+  if (missionState.phase === 'pickup') {
     missionEl.textContent = '📍 Գնա՛ պատվերի կետ';
     missionEl.classList.remove('deliver');
   } else {
@@ -1676,25 +1789,28 @@ function updateMissionUI() {
 
 // ========== CHECK MISSION PROGRESS ==========
 function checkMissionProgress() {
-  if (mission.phase === 'pickup' && mission.pickupPoint) {
-    const dx = player.position.x - mission.pickupPoint.x;
-    const dz = player.position.z - mission.pickupPoint.z;
+  // ⚠️ ԿՐԻՏԻԿԱԿԱՆ. Եթե արդեն ավարտված է, չկրկնենք
+  if (missionState.locked) return;
+
+  if (missionState.phase === 'pickup' && missionState.pickupPoint) {
+    const dx = player.position.x - missionState.pickupPoint.x;
+    const dz = player.position.z - missionState.pickupPoint.z;
     const distSq = dx * dx + dz * dz;
 
-    if (distSq < mission.pickupRadius * mission.pickupRadius) {
+    if (distSq < missionState.pickupRadius * missionState.pickupRadius) {
       // Վերցրինք պատվերը
-      mission.phase = 'deliver';
-      mission.pickupMarker.visible = false;
-      mission.deliverMarker.visible = true;
+      missionState.phase = 'deliver';
+      missionState.pickupMarker.visible = false;
+      missionState.deliverMarker.visible = true;
       updateMissionUI();
       showToast('📦 Պատվերը վերցվեց!');
     }
-  } else if (mission.phase === 'deliver' && mission.deliverPoint) {
-    const dx = player.position.x - mission.deliverPoint.x;
-    const dz = player.position.z - mission.deliverPoint.z;
+  } else if (missionState.phase === 'deliver' && missionState.deliverPoint) {
+    const dx = player.position.x - missionState.deliverPoint.x;
+    const dz = player.position.z - missionState.deliverPoint.z;
     const distSq = dx * dx + dz * dz;
 
-    if (distSq < mission.deliverRadius * mission.deliverRadius) {
+    if (distSq < missionState.deliverRadius * missionState.deliverRadius) {
       // Առաքվեց
       completeDelivery();
     }
@@ -1703,6 +1819,10 @@ function checkMissionProgress() {
 
 // ========== COMPLETE DELIVERY ==========
 function completeDelivery() {
+  // ⚠️ Կրկնակի կանչից պաշտպանություն
+  if (missionState.locked) return;
+  missionState.locked = true;
+
   gameState.score += 10;
   gameState.delivered += 1;
 
@@ -1711,7 +1831,7 @@ function completeDelivery() {
 
   showToast('+10 💰 Առաքվա՛ծ');
 
-  // Նոր առաքելություն
+  // Նոր առաքելություն 800ms հետո
   setTimeout(() => {
     startNewMission();
   }, 800);
@@ -1733,7 +1853,7 @@ function showToast(text) {
 
 // ========== MARKER ANIMATION ==========
 function animateMarkers(time) {
-  const markers = [mission.pickupMarker, mission.deliverMarker];
+  const markers = [missionState.pickupMarker, missionState.deliverMarker];
   markers.forEach(m => {
     if (!m || !m.visible) return;
 
@@ -1754,41 +1874,56 @@ function animateMarkers(time) {
   });
 }
 
-// ========== TIMER UPDATE ==========
+// ========== TIMER UPDATE (DOM THROTTLE) ==========
 const timerEl = document.getElementById('timer');
+let lastTimerText = '';
 
 function updateTimer() {
   const elapsed = Math.floor((Date.now() - gameState.startTime) / 1000);
   const minutes = Math.floor(elapsed / 60);
   const seconds = elapsed % 60;
-  timerEl.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  const text = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+  // ⚠️ Միայն թարմացնում ենք DOM-ը, երբ տեքստը փոխվում է
+  if (text !== lastTimerText) {
+    timerEl.textContent = text;
+    lastTimerText = text;
+  }
 }
 
-// === ՄԱՍ 8-ը կցվում է այստեղ ===
-
- /* ============================================================
-   ՄԱՍ 8 — MINIMAP + HUD UPDATE
+/* ============================================================
+   ՄԱՍ 8 — MINIMAP + HUD + DIRECTION ARROW (ՎԵՐՋՆԱԿԱՆ)
    ============================================================ */
 
-// ========== MINIMAP SETUP ==========
+// ============================================================
+// MINIMAP SETUP
+// ============================================================
+
 const minimapCanvas = document.getElementById('minimapCanvas');
 const minimapCtx = minimapCanvas.getContext('2d');
 
 const MINIMAP_SIZE = 200;
 const MINIMAP_RADIUS = MINIMAP_SIZE / 2;
-const MINIMAP_SCALE = 0.9; // 1 աշխարհի միավոր = 0.9 պիքսել
 
-// ========== DRAW MINIMAP ==========
+// ⚠️ ՈՒՂՂՎԱԾ. 0.9-ը չափազանց մեծ էր, մարկերները դուրս էին ընկնում
+const MINIMAP_SCALE = 0.42;
+
+// ============================================================
+// DRAW MINIMAP
+// ============================================================
+
 function drawMinimap() {
   const ctx = minimapCtx;
   const cx = MINIMAP_RADIUS;
   const cy = MINIMAP_RADIUS;
 
-  // --- Clear ---
+  // Clear
   ctx.clearRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE);
 
-  // --- Background circle ---
+  // ⚠️ ՄԻԱՅՆ ՄԵԿ save/restore ամբողջ գծելու համար
   ctx.save();
+
+  // Clip շրջանակ
   ctx.beginPath();
   ctx.arc(cx, cy, MINIMAP_RADIUS - 2, 0, Math.PI * 2);
   ctx.clip();
@@ -1797,11 +1932,10 @@ function drawMinimap() {
   ctx.fillStyle = '#2a3a2a';
   ctx.fillRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE);
 
-  // --- Camera follows player ---
+  // World → Minimap coordinate helper
   const px = player.position.x;
   const pz = player.position.z;
 
-  // World → Minimap coordinate helper
   function worldToMap(wx, wz) {
     return {
       x: cx + (wx - px) * MINIMAP_SCALE,
@@ -1809,48 +1943,60 @@ function drawMinimap() {
     };
   }
 
-  // --- Draw streets ---
+  // --- Streets ---
   ctx.strokeStyle = '#555555';
-  ctx.lineWidth = 6;
-
+  ctx.lineWidth = 4;
   STREETS.forEach(s => {
     const p1 = worldToMap(s.x1, s.z1);
     const p2 = worldToMap(s.x2, s.z2);
-
     ctx.beginPath();
     ctx.moveTo(p1.x, p1.y);
     ctx.lineTo(p2.x, p2.y);
     ctx.stroke();
   });
 
-  // --- Draw buildings ---
+  // --- Buildings ---
   ctx.fillStyle = '#8a7a5a';
   buildings.forEach(b => {
     const p1 = worldToMap(b.minX, b.minZ);
     const p2 = worldToMap(b.maxX, b.maxZ);
-
-    const w = p2.x - p1.x;
-    const h = p2.y - p1.y;
-
-    ctx.fillRect(p1.x, p1.y, w, h);
+    ctx.fillRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
   });
 
-  // --- Draw mission markers ---
-  if (mission.phase === 'pickup' && mission.pickupPoint) {
-    const p = worldToMap(mission.pickupPoint.x, mission.pickupPoint.z);
+  // --- Landmarks ---
+  ctx.fillStyle = '#a89878';
+  landmarks.forEach(b => {
+    const p1 = worldToMap(b.minX, b.minZ);
+    const p2 = worldToMap(b.maxX, b.maxZ);
+    ctx.fillRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
+  });
+
+  // --- Mission markers ---
+  if (missionState.phase === 'pickup' && missionState.pickupPoint) {
+    const p = worldToMap(missionState.pickupPoint.x, missionState.pickupPoint.z);
     drawMarkerDot(ctx, p.x, p.y, '#4facfe', 6);
   }
-
-  if (mission.phase === 'deliver' && mission.deliverPoint) {
-    const p = worldToMap(mission.deliverPoint.x, mission.deliverPoint.z);
+  if (missionState.phase === 'deliver' && missionState.deliverPoint) {
+    const p = worldToMap(missionState.deliverPoint.x, missionState.deliverPoint.z);
     drawMarkerDot(ctx, p.x, p.y, '#f5576c', 6);
   }
 
-  // --- Draw player (always at center) ---
-  // Սլաք, որը ցույց է տալիս ուղղությունը
+  // --- Player arrow (minimap-ի կենտրոնում) ---
+  //
+  // ⚠️ ՈՒՂՂՎԱԾ ՍԼԱՔԻ ԲԱՆԱՁԵՎԸ.
+  //
+  // Սլաքը նկարվում է (0,-8) գլխով → ուղղված է վերև (-Y)։
+  // Canvas-ի rotate(θ) պտտում է ԺԱՄԱՑՈՒՅՑԻ ՈՒՂՂՈՒԹՅԱՄԲ։
+  //
+  // heading = 0 → forward = +Z → minimap-ում ներքև → rotate(π)
+  // heading = π/2 → forward = +X → minimap-ում աջ → rotate(π/2)
+  // heading = π → forward = -Z → minimap-ում վերև → rotate(0)
+  // heading = -π/2 → forward = -X → minimap-ում ձախ → rotate(-π/2)
+  //
+  // Բանաձև. rotate = π - heading ✅
   ctx.save();
   ctx.translate(cx, cy);
-  ctx.rotate(-playerState.heading);
+  ctx.rotate(Math.PI - playerState.heading);
 
   ctx.fillStyle = '#ffd166';
   ctx.beginPath();
@@ -1861,30 +2007,33 @@ function drawMinimap() {
   ctx.closePath();
   ctx.fill();
 
-  // Սահման
   ctx.strokeStyle = '#000';
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
   ctx.restore();
 
+  // --- North indicator (ՆԵՐՍԸ clip-ի) ---
+  ctx.fillStyle = '#ffd166';
+  ctx.font = 'bold 12px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('N', cx, 14);
+
+  // ⚠️ ՄԻԱՅՆ ՄԵԿ restore ամբողջ ֆունկցիայի համար
   ctx.restore();
 
-  // --- Border ring ---
+  // --- Border ring (clip-ից դուրս, որպեսզի եզրը մաքուր լինի) ---
   ctx.strokeStyle = 'rgba(255,255,255,0.2)';
   ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.arc(cx, cy, MINIMAP_RADIUS - 3, 0, Math.PI * 2);
   ctx.stroke();
-
-  // --- North indicator ---
-  ctx.fillStyle = '#ffd166';
-  ctx.font = 'bold 12px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('N', cx, 14);
 }
 
-// ========== MARKER DOT HELPER ==========
+// ============================================================
+// MARKER DOT HELPER
+// ============================================================
+
 function drawMarkerDot(ctx, x, y, color, radius) {
   // Արտաքին շող
   ctx.beginPath();
@@ -1904,107 +2053,120 @@ function drawMarkerDot(ctx, x, y, color, radius) {
   ctx.stroke();
 }
 
-// ========== HUD UPDATE ==========
+// ============================================================
+// HUD UPDATE
+// ============================================================
+
 function updateHUD() {
   updateSpeedDisplay();
   updateTimer();
 }
 
-// ========== DIRECTION ARROW TO TARGET ==========
-// Սլաք էկրանի վրա, որը ցույց է տալիս դեպի թիրախը
-// (կցուցադրվի HUD-ի վրա, ոչ 3D-ում)
+// ============================================================
+// DIRECTION ARROW (դեպի թիրախ)
+// ============================================================
 
-// Ստեղծում ենք DOM element
-const arrowEl = document.createElement('div');
-arrowEl.style.cssText = `
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 48px;
-  color: #ffd166;
-  text-shadow: 0 0 20px rgba(255,209,102,0.8);
-  pointer-events: none;
-  z-index: 9;
-  opacity: 0;
-  transition: opacity 0.3s;
-  font-weight: 900;
-`;
-arrowEl.textContent = '⬆';
-document.body.appendChild(arrowEl);
+// ⚠️ Սլաքը արդեն գոյություն ունի DOM-ում (<div id="directionArrow">)
+const arrowEl = document.getElementById('directionArrow');
+let lastArrowTransform = '';
+let lastArrowOpacity = '';
 
-// ========== UPDATE DIRECTION ARROW ==========
 function updateDirectionArrow() {
   let target = null;
-
-  if (mission.phase === 'pickup' && mission.pickupPoint) {
-    target = mission.pickupPoint;
-  } else if (mission.phase === 'deliver' && mission.deliverPoint) {
-    target = mission.deliverPoint;
+  if (missionState.phase === 'pickup' && missionState.pickupPoint) {
+    target = missionState.pickupPoint;
+  } else if (missionState.phase === 'deliver' && missionState.deliverPoint) {
+    target = missionState.deliverPoint;
   }
 
   if (!target) {
-    arrowEl.style.opacity = '0';
+    if (lastArrowOpacity !== '0') {
+      arrowEl.style.opacity = '0';
+      lastArrowOpacity = '0';
+    }
     return;
   }
 
-  // Հաշվում ենք ուղղությունը
   const dx = target.x - player.position.x;
   const dz = target.z - player.position.z;
   const dist = Math.sqrt(dx * dx + dz * dz);
 
   // Եթե շատ մոտ ենք, թաքցնում ենք
   if (dist < 6) {
-    arrowEl.style.opacity = '0';
+    if (lastArrowOpacity !== '0') {
+      arrowEl.style.opacity = '0';
+      lastArrowOpacity = '0';
+    }
     return;
   }
 
-  // Հաշվում ենք անկյունը էկրանի կոորդինատներում
-  // Խաղի աշխարհում +Z-ը ներքև է, +X-ը աջ
-  // Խաղացողի heading-ը 0 է, երբ նայում է +Z-ին
+  // ⚠️ ՈՒՂՂՎԱԾ ԱՆԿՅՈՒՆԸ.
+  //
+  // heading = 0 → forward = +Z
+  // angleToTarget = atan2(dx, dz)
+  //   heading = 0 → target +Z-ում → angleToTarget = 0
+  //   heading = π/2 → target +X-ում → angleToTarget = π/2
+  //
+  // relativeAngle = angleToTarget - heading
+  //   Սա ցույց է տալիս, թե քանի՞ աստիճանով պետք է պտտվել մեքենան, որ ուղղվի դեպի թիրախը։
+  //
+  // Էկրանի վրա 0 = վերև, + = ժամացույցի ուղղությամբ։
+  // Սլաքը rotate(0) → վերև է։
+  //
+  // Ուստի. screenAngle = relativeAngle
   const angleToTarget = Math.atan2(dx, dz);
   const relativeAngle = angleToTarget - playerState.heading;
+  const screenAngle = relativeAngle;
 
-  // Էկրանի անկյունը (0 = վերև)
-  const screenAngle = -relativeAngle;
-
-  // Դիրքավորում ենք սլաքը էկրանի կենտրոնից 120px հեռավորության վրա
   const radius = 120;
   const ax = Math.sin(screenAngle) * radius;
   const ay = -Math.cos(screenAngle) * radius;
 
-  arrowEl.style.transform = `translate(calc(-50% + ${ax}px), calc(-50% + ${ay}px)) rotate(${screenAngle}rad)`;
-  arrowEl.style.opacity = '0.85';
+  const transform = `translate(calc(-50% + ${ax.toFixed(1)}px), calc(-50% + ${ay.toFixed(1)}px)) rotate(${screenAngle.toFixed(3)}rad)`;
+
+  if (transform !== lastArrowTransform) {
+    arrowEl.style.transform = transform;
+    lastArrowTransform = transform;
+  }
+  if (lastArrowOpacity !== '0.85') {
+    arrowEl.style.opacity = '0.85';
+    lastArrowOpacity = '0.85';
+  }
 }
 
-// ========== DISTANCE TO TARGET (optional display) ==========
-// Կարող ենք ցուցադրել հեռավորությունը mission-ի տեքստում
+// ============================================================
+// DISTANCE TO TARGET (DOM THROTTLE)
+// ============================================================
+
+let lastMissionDistText = '';
+
 function updateMissionDistance() {
   let target = null;
-  if (mission.phase === 'pickup' && mission.pickupPoint) {
-    target = mission.pickupPoint;
-  } else if (mission.phase === 'deliver' && mission.deliverPoint) {
-    target = mission.deliverPoint;
+  if (missionState.phase === 'pickup' && missionState.pickupPoint) {
+    target = missionState.pickupPoint;
+  } else if (missionState.phase === 'deliver' && missionState.deliverPoint) {
+    target = missionState.deliverPoint;
   }
-
   if (!target) return;
 
   const dx = target.x - player.position.x;
   const dz = target.z - player.position.z;
   const dist = Math.round(Math.sqrt(dx * dx + dz * dz));
 
-  // Ավելացնում ենք հեռավորությունը mission-ի տեքստին
-  const baseText = mission.phase === 'pickup'
+  const baseText = missionState.phase === 'pickup'
     ? '📍 Գնա՛ պատվերի կետ'
     : '📦 Հասցրու՛ հաճախորդին';
 
-  missionEl.textContent = `${baseText} — ${dist}մ`;
+  const text = `${baseText} — ${dist}մ`;
+
+  // ⚠️ Միայն թարմացնում ենք DOM-ը, երբ տեքստը փոխվում է
+  if (text !== lastMissionDistText) {
+    missionEl.textContent = text;
+    lastMissionDistText = text;
+  }
 }
-
-// === ՄԱՍ 9-ը կցվում է այստեղ ===
-
- /* ============================================================
-   ՄԱՍ 9 — GAME LOOP + FINAL WIRING
+/* ============================================================
+   ՄԱՍ 9 — GAME LOOP + FINAL WIRING (ՎԵՐՋՆԱԿԱՆ)
    ============================================================ */
 
 // ========== CLOCK ==========
@@ -2012,12 +2174,14 @@ const clock = new THREE.Clock();
 
 // ========== GAME LOOP ==========
 let animationId = null;
+let minimapAccumulator = 0;
+const MINIMAP_INTERVAL = 1 / 30; // 30 FPS
 
 function gameLoop() {
   animationId = requestAnimationFrame(gameLoop);
 
-  // Delta time (վայրկյաններով)
-  const dt = Math.min(clock.getDelta(), 0.05); // cap 50ms
+  // Delta time (cap 50ms)
+  const dt = Math.min(clock.getDelta(), 0.05);
   const time = performance.now();
 
   // --- Updates ---
@@ -2035,10 +2199,47 @@ function gameLoop() {
   // --- Render ---
   renderer.render(scene, camera);
 
-  // --- Minimap (ավելի դանդաղ՝ 30fps) ---
-  if (Math.floor(time / 33) !== Math.floor((time - dt * 1000) / 33)) {
+  // --- Minimap (30 FPS accumulator-ով) ---
+  minimapAccumulator += dt;
+  if (minimapAccumulator >= MINIMAP_INTERVAL) {
+    minimapAccumulator = 0;
     drawMinimap();
   }
+
+  // --- FPS (եթե DEBUG) ---
+  if (DEBUG) updateFPS();
+}
+
+// ========== CAMERA INITIAL PLACEMENT ==========
+// ⚠️ Տեղադրում ենք camera-ն անմիջապես chase դիրքում,
+// որ խաղի սկզբում ցատկ չլինի
+function placeCameraBehindPlayer() {
+  const h = playerState.heading;
+  const forwardX = Math.sin(h);
+  const forwardZ = Math.cos(h);
+
+  camera.position.set(
+    player.position.x - forwardX * CAM_DISTANCE,
+    player.position.y + CAM_HEIGHT,
+    player.position.z - forwardZ * CAM_DISTANCE
+  );
+  camLookAt.set(
+    player.position.x + forwardX * CAM_LOOK_AHEAD,
+    player.position.y + 1.5,
+    player.position.z + forwardZ * CAM_LOOK_AHEAD
+  );
+  camera.lookAt(camLookAt);
+  camInitialized = true;
+}
+
+// ========== RESET HUD THROTTLE FLAGS ==========
+// ⚠️ Երբ նորից սկսենք խաղը, HUD-ի throttle-ը reset արա
+function resetHudThrottle() {
+  lastSpeedKmh = -1;
+  lastTimerText = '';
+  lastMissionDistText = '';
+  lastArrowTransform = '';
+  lastArrowOpacity = '';
 }
 
 // ========== START GAME ==========
@@ -2057,19 +2258,30 @@ function startGame() {
   player.position.set(0, 0, 20);
   playerState.speed = 0;
   playerState.heading = 0;
+  playerState.angularVelocity = 0;   // ⚠️ ՆՈՐ
+  playerState.drift = 0;              // ⚠️ ՆՈՐ
+
+  // ⚠️ Reset camera-ի flag-ը, որ chase camera-ն անմիջապես տեղադրվի
+  camInitialized = false;
+
+  // ⚠️ Reset HUD throttle-ը
+  resetHudThrottle();
 
   // HUD-ի reset
   document.getElementById('score').textContent = '0';
   document.getElementById('delivered').textContent = '0';
   document.getElementById('timer').textContent = '0:00';
 
+  // ⚠️ Camera-ն անմիջապես հետևից
+  placeCameraBehindPlayer();
+
   // Առաջին առաքելությունը
   startNewMission();
 
-  // Ցուցադրում ենք ողջույնի հաղորդագրություն
+  // Ողջույն
   showToast('🛵 Բարի գալուստ Երևան');
 
-  // Սկսում ենք loop-ը
+  // Սկսում ենք loop-ը (եթե դեռ չի սկսվել)
   if (!animationId) {
     clock.start();
     gameLoop();
@@ -2080,7 +2292,7 @@ function startGame() {
 const startBtn = document.getElementById('startBtn');
 startBtn.addEventListener('click', startGame);
 
-// Նաև Enter-ով սկսել
+// Enter-ով սկսել
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Enter' && !gameState.running) {
     startGame();
@@ -2088,26 +2300,25 @@ window.addEventListener('keydown', (e) => {
 });
 
 // ========== INITIAL RENDER (before start) ==========
-// Ցուցադրում ենք խաղի աշխարհը start screen-ի հետևում
-camera.position.copy(CAM_OFFSET);
-camera.lookAt(0, 0, 0);
+// Սկզբում տեղադրում ենք camera-ն հետևից, որ start screen-ի
+// հետևում արդեն chase դիրքը լինի
+placeCameraBehindPlayer();
 renderer.render(scene, camera);
 
-// Սկսում ենք loop-ը անմիջապես, բայց physics-ը չի աշխատի
-// մինչև startGame-ը չկանչվի
+// Սկսում ենք loop-ը անմիջապես
+// (physics-ը չի աշխատի մինչև startGame-ը չկանչվի)
 clock.start();
 gameLoop();
 
-// ========== FPS COUNTER (optional, dev) ==========
+// ========== FPS COUNTER (DEBUG միայն) ==========
 let fpsFrames = 0;
 let fpsLastTime = performance.now();
-let fpsValue = 60;
 
 function updateFPS() {
   fpsFrames++;
   const now = performance.now();
   if (now - fpsLastTime >= 1000) {
-    fpsValue = fpsFrames;
+    console.log('FPS:', fpsFrames);
     fpsFrames = 0;
     fpsLastTime = now;
   }
@@ -2120,10 +2331,12 @@ window.addEventListener('beforeunload', () => {
   }
 });
 
-// ========== WELCOME LOG ==========
-console.log('%c🛵 Երևանյան Առաքիչ', 'font-size: 24px; font-weight: 900; color: #ff6b35;');
-console.log('%cPrototype v0.1 — 2.5D Isometric', 'font-size: 14px; color: #ffd166;');
-console.log('%cՕգտագործիր WASD կամ սլաքները քշելու համար', 'font-size: 12px; color: #888;');
+// ========== WELCOME LOG (DEBUG միայն) ==========
+if (DEBUG) {
+  console.log('%c🛵 Երևանյան Առաքիչ', 'font-size: 24px; font-weight: 900; color: #ff6b35;');
+  console.log('%cPrototype v1.0 — Chase Camera', 'font-size: 14px; color: #ffd166;');
+  console.log('%cՕգտագործիր WASD կամ սլաքները քշելու համար', 'font-size: 12px; color: #888;');
+}
 
 /* ============================================================
    ՎԵՐՋ 🎉
