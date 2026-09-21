@@ -1,332 +1,312 @@
 <!DOCTYPE html>
 <html lang="hy">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Երևանյան Առաքիչ - Module 1: Core Physics Engine</title>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            background: #090909;
-            color: #e0e0e0;
-            font-family: 'Courier New', Courier, monospace;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            overflow: hidden;
-        }
-        #canvas-box {
-            position: relative;
-            border: 2px solid #333;
-            box-shadow: 0 25px 60px rgba(0,0,0,0.9);
-            background: #151515;
-            border-radius: 8px;
-            overflow: hidden;
-        }
-        canvas { display: block; }
-        #telemetry {
-            position: absolute;
-            top: 15px;
-            left: 15px;
-            background: rgba(10, 10, 10, 0.9);
-            border: 1px solid #444;
-            padding: 15px;
-            border-radius: 6px;
-            font-size: 12px;
-            width: 310px;
-            pointer-events: none;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-        }
-        .tele-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 5px;
-            border-bottom: 1px solid #222;
-            padding-bottom: 3px;
-        }
-        .tele-val { color: #00ffcc; font-weight: bold; }
-        #terminal-log {
-            position: absolute;
-            bottom: 15px;
-            left: 15px;
-            right: 15px;
-            background: rgba(5, 5, 5, 0.95);
-            border: 1px solid #333;
-            padding: 10px 15px;
-            border-radius: 4px;
-            font-size: 11px;
-            color: #ffcc00;
-        }
-    </style>
+<meta charset="UTF-8">
+<title>Երևանյան Առաքիչ — Prototype</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    overflow: hidden;
+    background: #1a1a2e;
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    color: #fff;
+    user-select: none;
+  }
+  #game { width: 100vw; height: 100vh; display: block; }
+
+  /* ==== HUD ==== */
+  .hud {
+    position: fixed;
+    pointer-events: none;
+    z-index: 10;
+  }
+  #topBar {
+    top: 16px; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.55);
+    padding: 10px 22px;
+    border-radius: 14px;
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.1);
+    display: flex; gap: 24px;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+  #topBar span { color: #ffd166; }
+  #topBar .label { color: #aaa; font-weight: 400; margin-right: 6px; }
+
+  #mission {
+    top: 80px; left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, #ff6b35, #f7931e);
+    padding: 12px 28px;
+    border-radius: 30px;
+    font-size: 17px;
+    font-weight: 700;
+    box-shadow: 0 8px 24px rgba(255,107,53,0.4);
+    transition: all 0.3s;
+    text-align: center;
+  }
+  #mission.pickup { background: linear-gradient(135deg, #4facfe, #00f2fe); box-shadow: 0 8px 24px rgba(79,172,254,0.4); }
+  #mission.deliver { background: linear-gradient(135deg, #f093fb, #f5576c); box-shadow: 0 8px 24px rgba(245,87,108,0.4); }
+
+  #speedo {
+    bottom: 24px; right: 24px;
+    background: rgba(0,0,0,0.6);
+    padding: 14px 22px;
+    border-radius: 16px;
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.1);
+    text-align: center;
+  }
+  #speedo .num { font-size: 32px; font-weight: 800; color: #ffd166; }
+  #speedo .unit { font-size: 12px; color: #888; letter-spacing: 2px; }
+
+  #minimap {
+    bottom: 24px; left: 24px;
+    width: 180px; height: 180px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.6);
+    border: 2px solid rgba(255,255,255,0.15);
+    overflow: hidden;
+    backdrop-filter: blur(8px);
+  }
+  #minimap canvas { width: 100%; height: 100%; }
+
+  #controls {
+    top: 16px; left: 16px;
+    background: rgba(0,0,0,0.5);
+    padding: 10px 16px;
+    border-radius: 12px;
+    font-size: 12px;
+    color: #aaa;
+    line-height: 1.7;
+    backdrop-filter: blur(8px);
+  }
+  #controls b { color: #ffd166; }
+
+  #toast {
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    background: rgba(0,0,0,0.85);
+    padding: 20px 40px;
+    border-radius: 20px;
+    font-size: 24px;
+    font-weight: 800;
+    color: #ffd166;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    border: 2px solid #ffd166;
+  }
+  #toast.show { transform: translate(-50%, -50%) scale(1); }
+</style>
 </head>
 <body>
 
-<div id="canvas-box">
-    <canvas id="coreCanvas" width="1280" height="720"></canvas>
-    
-    <div id="telemetry">
-        <div class="tele-row"><span>Մոդուլի կարգավիճակ:</span> <span class="tele-val">ԱԿՏԻՎ (MOD-1)</span></div>
-        <div class="tele-row"><span>Քաշային Զանգված (Mass):</span> <span class="tele-val">1.45 kg</span></div>
-        <div class="tele-row"><span>Գծային Արագություն:</span> <span class="tele-val" id="t-speed">0.00 px/s</span></div>
-        <div class="tele-row"><span>Անկյունային Վեկտոր:</span> <span class="tele-val" id="t-angle">0.00°</span></div>
-        <div class="tele-row"><span>Ուղղության Ինդեքս (8-Dir):</span> <span class="tele-val" id="t-octant">0 - Front</span></div>
-        <div class="tele-row"><span>Դիրքը Տարածության մեջ:</span> <span class="tele-val" id="t-pos">X: 0, Y: 0</span></div>
-    </div>
+<canvas id="game"></canvas>
 
-    <div id="terminal-log">
-        [MODULE-1 SYSTEM]: Հիմնական վեկտորային մաթեմատիկան և ֆիզիկական միջուկը բեռնված են։ Սպասվում է Մոդուլ-2-ի միացմանը։
-    </div>
+<div class="hud" id="topBar">
+  <div><span class="label">💰</span><span id="score">0</span></div>
+  <div><span class="label">📦</span><span id="delivered">0</span></div>
+  <div><span class="label">⏱️</span><span id="timer">0:00</span></div>
 </div>
 
-<script>
-/**
- * -------------------------------------------------------------------------
- * ԵՐԵՎԱՆՅԱՆ ԱՌԱՔԻՉ - ՖԻԶԻԿԱԿԱՆ ԵՎ ՄԱԹԵՄԱՏԻԿԱԿԱՆ ՄԻՋՈՒԿ (MODUL-1)
- * -------------------------------------------------------------------------
- */
+<div class="hud" id="mission">Գնա՛ պատվերի կետ 📍</div>
 
-class Vector2D {
-    constructor(x = 0, y = 0) {
-        this.x = x;
-        this.y = y;
-    }
-    set(x, y) { this.x = x; this.y = y; return this; }
-    add(v) { this.x += v.x; this.y += v.y; return this; }
-    sub(v) { this.x -= v.x; this.y -= v.y; return this; }
-    mult(n) { this.x *= n; this.y *= n; return this; }
-    div(n) { if (n !== 0) { this.x /= n; this.y /= n; } return this; }
-    magSq() { return this.x * this.x + this.y * this.y; }
-    mag() { return Math.sqrt(this.magSq()); }
-    normalize() {
-        let m = this.mag();
-        if (m !== 0) this.div(m);
-        return this;
-    }
-    copy() { return new Vector2D(this.x, this.y); }
-    static distance(v1, v2) {
-        let dx = v1.x - v2.x;
-        let dy = v1.y - v2.y;
-        return Math.sqrt(dx * dx + dy * dy);
-    }
+<div class="hud" id="controls">
+  <b>W</b> / <b>↑</b> — արագացնել<br>
+  <b>S</b> / <b>↓</b> — արգելակ<br>
+  <b>A</b> / <b>←</b> — ձախ<br>
+  <b>D</b> / <b>→</b> — աջ<br>
+  <b>Space</b> — ձեռքի արգելակ
+</div>
+
+<div class="hud" id="speedo">
+  <div class="num" id="speedNum">0</div>
+  <div class="unit">KM/H</div>
+</div>
+
+<div class="hud" id="minimap"><canvas id="minimapCanvas" width="180" height="180"></canvas></div>
+
+<div class="hud" id="toast">+10 💰</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+  }
 }
-
-class PhysicsEngineCore {
-    constructor(canvas) {
-        this.canvas = canvas;
-        this.ctx = canvas.getContext('2d');
-        
-        // Խաղացողի ֆիզիկական պարամետրեր
-        this.pos = new Vector2D(canvas.width / 2, canvas.height / 2);
-        this.velocity = new Vector2D(0, 0);
-        this.acceleration = new Vector2D(0, 0);
-        
-        this.maxSpeed = 6.0;
-        this.enginePower = 0.25;
-        this.friction = 0.085;
-        this.mass = 1.45;
-        
-        this.angle = 0; // Ռադիաններով
-        this.angularVelocity = 0;
-        this.rotationSpeed = 0.055;
-        
-        this.radius = 22; // Բախման հաշվարկային շառավիղ
-        
-        this.keys = { up: false, down: false, left: false, right: false };
-        this.initInputListeners();
-        
-        // Նախնական խոչընդոտներ (շենքերի բլոկներ)
-        this.obstacles = [
-            { x: 100, y: 100, w: 250, h: 160, name: "Շենք Կոմիտասում" },
-            { x: 930, y: 100, w: 250, h: 160, name: "Շենք Մաշտոցում" },
-            { x: 100, y: 460, w: 250, h: 160, name: "Շենք Աբովյանում" },
-            { x: 930, y: 460, w: 250, h: 160, name: "Շենք Հանրապետության" }
-        ];
-    }
-
-    initInputListeners() {
-        window.addEventListener('keydown', (e) => this.handleKey(e, true));
-        window.addEventListener('keyup', (e) => this.handleKey(e, false));
-    }
-
-    handleKey(e, isDown) {
-        switch(e.code) {
-            case 'ArrowUp':
-            case 'KeyW':
-                this.keys.up = isDown; break;
-            case 'ArrowDown':
-            case 'KeyS':
-                this.keys.down = isDown; break;
-            case 'ArrowLeft':
-            case 'KeyA':
-                this.keys.left = isDown; break;
-            case 'ArrowRight':
-            case 'KeyD':
-                this.keys.right = isDown; break;
-        }
-    }
-
-    update() {
-        // 1. Անկյան կառավարում և շրջադարձային ֆիզիկա
-        if (this.keys.left) {
-            this.angle -= this.rotationSpeed * (this.velocity.mag() / this.maxSpeed + 0.3);
-        }
-        if (this.keys.right) {
-            this.angle += this.rotationSpeed * (this.velocity.mag() / this.maxSpeed + 0.3);
-        }
-
-        // 2. Վեկտորային ուժի գեներացիա ըստ ուղղության
-        let forwardVector = new Vector2D(Math.sin(this.angle), -Math.cos(this.angle));
-
-        if (this.keys.up) {
-            this.acceleration = forwardVector.copy().mult(this.enginePower / this.mass);
-            this.velocity.add(this.acceleration);
-        } else if (this.keys.down) {
-            this.acceleration = forwardVector.copy().mult(-this.enginePower * 0.5 / this.mass);
-            this.velocity.add(this.acceleration);
-        } else {
-            // Շփման ուժի կիրառում (Friction damping)
-            this.velocity.mult(1 - this.friction);
-        }
-
-        // Արագության սահմանափակում (Clamping)
-        let currentSpeed = this.velocity.mag();
-        if (currentSpeed > this.maxSpeed) {
-            this.velocity.normalize().mult(this.maxSpeed);
-        }
-
-        // Հաջորդ կոորդինատի կանխատեսում բախումների ստուգման համար
-        let nextPosX = this.pos.x + this.velocity.x;
-        let nextPosY = this.pos.y + this.velocity.y;
-
-        // 3. Բախումների ստուգում աշխարհի սահմանների և շենքերի հետ
-        let collided = this.resolveWorldCollisions(nextPosX, nextPosY);
-        if (!collided) {
-            this.pos.x = nextPosX;
-            this.pos.y = nextPosY;
-        } else {
-            // Անկյունային արտացոլում և հարվածի էներգիայի կորուստ
-            this.velocity.mult(-0.35);
-        }
-
-        this.updateTelemetry(currentSpeed);
-    }
-
-    resolveWorldCollisions(nx, ny) {
-        // Սահմաններ
-        if (nx < this.radius || nx > this.canvas.width - this.radius) return true;
-        if (ny < this.radius || ny > this.canvas.height - this.radius) return true;
-
-        // Շենքերի ուղղանկյուն բախումներ (AABB Collision Detection)
-        for (let obs of this.obstacles) {
-            if (nx + this.radius > obs.x && nx - this.radius < obs.x + obs.w &&
-                ny + this.radius > obs.y && ny - this.radius < obs.y + obs.h) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    getOctantInfo() {
-        let deg = (this.angle * 180 / Math.PI) % 360;
-        if (deg < 0) deg += 360;
-        let octantIndex = Math.floor((deg + 22.5) / 45) % 8;
-        const labels = [
-            "0 - Front (Ուղիղ դիմացից)",
-            "1 - Front-Right (Դիմացի 3/4 աջ)",
-            "2 - Right (Աջ կողքից)",
-            "3 - Back-Right (Հետևի 3/4 աջ)",
-            "4 - Back (Ուղիղ հետևից)",
-            "5 - Back-Left (Հետևի 3/4 ձախ)",
-            "6 - Left (Ձախ կողքից)",
-            "7 - Front-Left (Դիմացի 3/4 ձախ)"
-        ];
-        return { index: octantIndex, label: labels[octantIndex], degrees: deg.toFixed(1) };
-    }
-
-    updateTelemetry(speed) {
-        let oct = this.getOctantInfo();
-        document.getElementById('t-speed').innerText = (speed * 15).toFixed(1) + ' կմ/ժ';
-        document.getElementById('t-angle').innerText = oct.degrees + '°';
-        document.getElementById('t-octant').innerText = oct.label;
-        document.getElementById('t-pos').innerText = `X: ${Math.round(this.pos.x)}, Y: ${Math.round(this.pos.y)}`;
-    }
-
-    renderEnvironment() {
-        // Ասֆալտի ֆոն
-        this.ctx.fillStyle = '#1c1c1c';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-        // Փողոցային խաչվող մատրիցա
-        this.ctx.fillStyle = '#262626';
-        this.ctx.fillRect(0, 260, this.canvas.width, 200); // Հորիզոնական պողոտա
-        this.ctx.fillRect(380, 0, 520, this.canvas.height); // Ուղղահայաց պողոտա
-
-        // Դեղին բաժանարար գծեր
-        this.ctx.strokeStyle = '#e6b800';
-        this.ctx.lineWidth = 3;
-        this.ctx.setLineDash([20, 15]);
-        this.ctx.beginPath();
-        this.ctx.moveTo(0, 360); this.ctx.lineTo(this.canvas.width, 360);
-        this.ctx.moveTo(640, 0); this.ctx.lineTo(640, this.canvas.height);
-        this.ctx.stroke();
-        this.ctx.setLineDash([]);
-
-        // Շենքեր / Արգելափակոցներ
-        this.ctx.fillStyle = '#2f3640';
-        this.ctx.strokeStyle = '#485460';
-        this.ctx.lineWidth = 3;
-        for (let obs of this.obstacles) {
-            this.ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
-            this.ctx.strokeRect(obs.x, obs.y, obs.w, obs.h);
-            
-            // Շենքի անվանումը վրան
-            this.ctx.fillStyle = '#718093';
-            this.ctx.font = '12px Courier New';
-            this.ctx.fillText(obs.name.toUpperCase(), obs.x + 15, obs.y + 25);
-        }
-    }
-
-    renderPlayer() {
-        this.ctx.save();
-        this.ctx.translate(this.pos.x, this.pos.y);
-        this.ctx.rotate(this.angle);
-
-        // Մակետային վեկտորային սկուտեր (մինչև 8 ռակուրսի PNG նկարները միացնելը)
-        this.ctx.fillStyle = '#fbc531';
-        this.ctx.fillRect(-12, -20, 24, 40);
-
-        // Առաքման պայուսակ հետևում
-        this.ctx.fillStyle = '#e74c3c';
-        this.ctx.fillRect(-14, 6, 28, 18);
-
-        // Վարորդի գլուխ / սաղավարտ
-        this.ctx.fillStyle = '#2f3640';
-        this.ctx.beginPath();
-        this.ctx.arc(0, -5, 8, 0, Math.PI * 2);
-        this.ctx.fill();
-
-        this.ctx.restore();
-    }
-
-    run() {
-        const frameLoop = () => {
-            this.update();
-            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-            this.renderEnvironment();
-            this.renderPlayer();
-            requestAnimationFrame(frameLoop);
-        };
-        requestAnimationFrame(frameLoop);
-    }
-}
-
-window.onload = () => {
-    const core = new PhysicsEngineCore(document.getElementById('coreCanvas'));
-    core.run();
-};
 </script>
 
-</body>
-</html>
+<script type="module">
+import * as THREE from 'three';
+
+// ============================================================
+//  ԵՐԵՎԱՆՅԱՆ ԱՌԱՔԻՉ — 2.5D Isometric Prototype
+// ============================================================
+
+// ---------- SCENE ----------
+const canvas = document.getElementById('game');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+scene.fog = new THREE.Fog(0x87ceeb, 80, 180);
+
+// ---------- CAMERA (isometric 2.5D) ----------
+const camera = new THREE.PerspectiveCamera(35, window.innerWidth/window.innerHeight, 0.1, 500);
+const CAM_OFFSET = new THREE.Vector3(28, 32, 28); // isometric feel
+const CAM_LOOK_OFFSET = new THREE.Vector3(0, 0, -3);
+
+// ---------- LIGHTS ----------
+const hemi = new THREE.HemisphereLight(0xffffff, 0x6688aa, 0.9);
+scene.add(hemi);
+
+const sun = new THREE.DirectionalLight(0xfff2cc, 1.2);
+sun.position.set(40, 60, 30);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -80;
+sun.shadow.camera.right = 80;
+sun.shadow.camera.top = 80;
+sun.shadow.camera.bottom = -80;
+sun.shadow.camera.far = 200;
+scene.add(sun);
+
+// ---------- GROUND ----------
+const groundGeo = new THREE.PlaneGeometry(400, 400);
+const groundMat = new THREE.MeshStandardMaterial({ color: 0x6ab04c });
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// ---------- STREET NETWORK ----------
+// Փողոցների ցանց (ուղիղ ուղղանկյուններ)
+const STREETS = [
+  // Horizontal streets (x-range, z)
+  { x1: -80, x2: 80, z1: -3, z2: 3 },   // Main Ave
+  { x1: -80, x2: 80, z1: -33, z2: -27 },
+  { x1: -80, x2: 80, z1: -63, z2: -57 },
+  { x1: -80, x2: 80, z1: 27, z2: 33 },
+  { x1: -80, x2: 80, z1: 57, z2: 63 },
+  // Vertical streets (z-range, x)
+  { z1: -80, z2: 80, x1: -3, x2: 3 },
+  { z1: -80, z2: 80, x1: -33, x2: -27 },
+  { z1: -80, z2: 80, x1: -63, x2: -57 },
+  { z1: -80, z2: 80, x1: 27, x2: 33 },
+  { z1: -80, z2: 80, x1: 57, x2: 63 },
+];
+
+const streetMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3a });
+const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0xb8b8b8 });
+
+STREETS.forEach(s => {
+  const w = s.x2 - s.x1;
+  const d = s.z2 - s.z1;
+  const cx = (s.x1 + s.x2) / 2;
+  const cz = (s.z1 + s.z2) / 2;
+
+  // Road
+  const road = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, d), streetMat);
+  road.position.set(cx, 0.03, cz);
+  road.receiveShadow = true;
+  scene.add(road);
+
+  // Sidewalks (thin strips on each side)
+  const sw = 0.8;
+  if (w > d) {
+    // horizontal
+    const s1 = new THREE.Mesh(new THREE.BoxGeometry(w, 0.15, sw), sidewalkMat);
+    s1.position.set(cx, 0.08, s.z1 - sw/2);
+    s1.receiveShadow = true; scene.add(s1);
+    const s2 = s1.clone(); s2.position.z = s.z2 + sw/2; scene.add(s2);
+  } else {
+    const s1 = new THREE.Mesh(new THREE.BoxGeometry(sw, 0.15, d), sidewalkMat);
+    s1.position.set(s.x1 - sw/2, 0.08, cz);
+    s1.receiveShadow = true; scene.add(s1);
+    const s2 = s1.clone(); s2.position.x = s.x2 + sw/2; scene.add(s2);
+  }
+
+  // Road center dashes
+  const dashCount = Math.floor(Math.max(w, d) / 6);
+  for (let i = 0; i < dashCount; i++) {
+    const dash = new THREE.Mesh(
+      new THREE.BoxGeometry(w > d ? 2 : 0.15, 0.06, w > d ? 0.15 : 2),
+      new THREE.MeshStandardMaterial({ color: 0xffdd55 })
+    );
+    const t = (i + 0.5) / dashCount;
+    if (w > d) dash.position.set(s.x1 + w * t, 0.06, cz);
+    else dash.position.set(cx, 0.06, s.z1 + d * t);
+    scene.add(dash);
+  }
+});
+
+// ---------- BUILDINGS ----------
+// Շենքեր՝ բլոկների միջև
+const buildingColors = [0xd4a373, 0xccd5ae, 0xe9edc9, 0xfaedcd, 0xb08968, 0xa68a6d, 0xc9ada7];
+const buildings = []; // for collision
+
+function addBuilding(x, z, w, d, h) {
+  const color = buildingColors[Math.floor(Math.random() * buildingColors.length)];
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.9 });
+  const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  b.position.set(x, h/2, z);
+  b.castShadow = true;
+  b.receiveShadow = true;
+  scene.add(b);
+
+  // Roof
+  const roofMat = new THREE.MeshStandardMaterial({ color: 0x8b5a3c });
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(w + 0.4, 0.4, d + 0.4), roofMat);
+  roof.position.set(x, h + 0.2, z);
+  roof.castShadow = true;
+  scene.add(roof);
+
+  // Windows (simple)
+  const winMat = new THREE.MeshStandardMaterial({ color: 0x88ccff, emissive: 0x224466, emissiveIntensity: 0.3 });
+  const rows = Math.floor(h / 3);
+  const cols = Math.floor(w / 3);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const win = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.6, 0.1), winMat);
+      win.position.set(x - w/2 + 1.5 + c * 3, 2 + r * 3, z + d/2 + 0.05);
+      scene.add(win);
+    }
+  }
+
+  buildings.push({ x, z, w, d, h });
+}
+
+// Generate buildings in blocks between streets
+const blockCenters = [];
+const xs = [-80, -63, -57, -33, -27, -3, 3, 27, 33, 57, 63, 80];
+const zs = [-80, -63, -57, -33, -27, -3, 3, 27, 33, 57, 63, 80];
+
+// Blocks between streets
+for (let i = 0; i < xs.length - 1; i += 2) {
+  for (let j = 0; j < zs.length - 1; j += 2) {
+    const bx1 = xs[i+1], bx2 = xs[i+2];
+    const bz1 = zs[j+1], bz2 = zs[j+2];
+    if (bx2 - bx1 < 5 || bz2 - bz1 < 5) continue;
+
+    const cx = (bx1 + bx2) / 2;
+    const cz = (bz1 + bz2) / 2;
+    const bw = (bx2 - bx1) * 0.7;
+    const bd = (bz2 - bz1) * 0.7;
+    const h = 6 + Math.random() * 12;
+    addBuilding(cx, cz, bw, bd, h);
+  }
+}
+
+// ---------- LANDMARKS ----------
+// Կասկադի նման սանդղավոր կառույց
+function addCascade(x, z) {
+  const group = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0xf5e6d3, roughness: 0.8 });
+  for (let i = 0; i < 5; i++) {
+    const step = new THREE.Mesh(new THREE.B
