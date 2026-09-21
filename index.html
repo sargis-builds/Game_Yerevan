@@ -541,6 +541,12 @@ intersections.forEach(inter => {
 
 // ========== BUILDING COLORS ==========
 // Երևանի շենքերի գույներ — բեժ, կրեմ, դարչնագույն, մոխրագույն
+/* ============================================================
+   ՄԱՍ 4 — BUILDINGS + LANDMARKS
+   ============================================================ */
+
+// ========== BUILDING COLORS ==========
+// Երևանի շենքերի գույներ — բեժ, կրեմ, դարչնագույն, մոխրագույն
 const buildingColors = [
   0xd4a373, 0xccd5ae, 0xe9edc9, 0xfaedcd,
   0xb08968, 0xa68a6d, 0xc9ada7, 0xe8d5b7,
@@ -554,6 +560,16 @@ const buildings = [];
 
 // ========== BUILDING FACTORY ==========
 function addBuilding(x, z, w, d, h) {
+  // Անվտանգության ստուգում
+  if (!isFinite(x) || !isFinite(z) || !isFinite(w) || !isFinite(d) || !isFinite(h)) {
+    console.warn('addBuilding: invalid params', { x, z, w, d, h });
+    return;
+  }
+  if (w <= 0 || d <= 0 || h <= 0) {
+    console.warn('addBuilding: non-positive size', { x, z, w, d, h });
+    return;
+  }
+
   const color = buildingColors[Math.floor(Math.random() * buildingColors.length)];
   const roofColor = roofColors[Math.floor(Math.random() * roofColors.length)];
 
@@ -594,9 +610,9 @@ function addBuilding(x, z, w, d, h) {
   const winH = 1.6;
   const winGapX = 2.8;
   const winGapY = 3.2;
-  const rows = Math.floor((h - 2) / winGapY);
-  const colsX = Math.floor((w - 2) / winGapX);
-  const colsZ = Math.floor((d - 2) / winGapX);
+  const rows = Math.max(0, Math.floor((h - 2) / winGapY));
+  const colsX = Math.max(0, Math.floor((w - 2) / winGapX));
+  const colsZ = Math.max(0, Math.floor((d - 2) / winGapX));
 
   // Front (+Z) and Back (-Z) windows
   for (let r = 0; r < rows; r++) {
@@ -658,16 +674,23 @@ const xs = [-100, -76, -68, -40, -32, -4, 4, 32, 40, 68, 76, 100];
 const zs = [-100, -76, -68, -40, -32, -4, 4, 32, 40, 68, 76, 100];
 
 // Ամեն բլոկի մեջ դնում ենք 1 կամ 2 շենք
-for (let i = 0; i < xs.length - 1; i += 2) {
-  for (let j = 0; j < zs.length - 1; j += 2) {
+// ⚠️ ԿԱՐԵՎՈՐ՝ i < xs.length - 2 (ոչ -1), որպեսզի i+2 չանցնի սահմանը
+for (let i = 0; i < xs.length - 2; i += 2) {
+  for (let j = 0; j < zs.length - 2; j += 2) {
     const bx1 = xs[i + 1];
     const bx2 = xs[i + 2];
     const bz1 = zs[j + 1];
     const bz2 = zs[j + 2];
 
+    // Անվտանգության ստուգում
+    if (bx1 === undefined || bx2 === undefined) continue;
+    if (bz1 === undefined || bz2 === undefined) continue;
+
     const blockW = bx2 - bx1;
     const blockD = bz2 - bz1;
 
+    // Ստուգում ենք որ արժեքները վավեր են
+    if (!isFinite(blockW) || !isFinite(blockD)) continue;
     if (blockW < 6 || blockD < 6) continue;
 
     const cx = (bx1 + bx2) / 2;
@@ -807,6 +830,8 @@ for (let i = 0; i < xs.length - 1; i += 2) {
     minZ: z - 7, maxZ: z + 7
   });
 })();
+
+// === ՄԱՍ 5-ը կցվում է այստեղ ===
 
 // === ՄԱՍ 5-ը կցվում է այստեղ ===
 
