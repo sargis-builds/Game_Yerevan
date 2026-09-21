@@ -2166,7 +2166,7 @@ function updateMissionDistance() {
   }
 }
 /* ============================================================
-   ՄԱՍ 9 — GAME LOOP + FINAL WIRING (ՎԵՐՋՆԱԿԱՆ)
+   ՄԱՍ 9 — GAME LOOP + FINAL WIRING (ՎԵՐՋՆԱԿԱՆ + MOBILE)
    ============================================================ */
 
 // ========== CLOCK ==========
@@ -2175,16 +2175,14 @@ const clock = new THREE.Clock();
 // ========== GAME LOOP ==========
 let animationId = null;
 let minimapAccumulator = 0;
-const MINIMAP_INTERVAL = 1 / 30; // 30 FPS
+const MINIMAP_INTERVAL = 1 / 30;
 
 function gameLoop() {
   animationId = requestAnimationFrame(gameLoop);
 
-  // Delta time (cap 50ms)
   const dt = Math.min(clock.getDelta(), 0.05);
   const time = performance.now();
 
-  // --- Updates ---
   if (gameState.running) {
     updatePhysics(dt);
     checkMissionProgress();
@@ -2196,23 +2194,18 @@ function gameLoop() {
   updateDirectionArrow();
   updateMissionDistance();
 
-  // --- Render ---
   renderer.render(scene, camera);
 
-  // --- Minimap (30 FPS accumulator-ով) ---
   minimapAccumulator += dt;
   if (minimapAccumulator >= MINIMAP_INTERVAL) {
     minimapAccumulator = 0;
     drawMinimap();
   }
 
-  // --- FPS (եթե DEBUG) ---
   if (DEBUG) updateFPS();
 }
 
 // ========== CAMERA INITIAL PLACEMENT ==========
-// ⚠️ Տեղադրում ենք camera-ն անմիջապես chase դիրքում,
-// որ խաղի սկզբում ցատկ չլինի
 function placeCameraBehindPlayer() {
   const h = playerState.heading;
   const forwardX = Math.sin(h);
@@ -2233,7 +2226,6 @@ function placeCameraBehindPlayer() {
 }
 
 // ========== RESET HUD THROTTLE FLAGS ==========
-// ⚠️ Երբ նորից սկսենք խաղը, HUD-ի throttle-ը reset արա
 function resetHudThrottle() {
   lastSpeedKmh = -1;
   lastTimerText = '';
@@ -2244,44 +2236,31 @@ function resetHudThrottle() {
 
 // ========== START GAME ==========
 function startGame() {
-  // Թաքցնում ենք start screen-ը
   const startScreen = document.getElementById('startScreen');
   startScreen.classList.add('hide');
 
-  // Վերականգնում ենք state-ը
   gameState.running = true;
   gameState.startTime = Date.now();
   gameState.score = 0;
   gameState.delivered = 0;
 
-  // Խաղացողի սկզբնական դիրք
   player.position.set(0, 0, 20);
   playerState.speed = 0;
   playerState.heading = 0;
-  playerState.angularVelocity = 0;   // ⚠️ ՆՈՐ
-  playerState.drift = 0;              // ⚠️ ՆՈՐ
+  playerState.angularVelocity = 0;
+  playerState.drift = 0;
 
-  // ⚠️ Reset camera-ի flag-ը, որ chase camera-ն անմիջապես տեղադրվի
   camInitialized = false;
-
-  // ⚠️ Reset HUD throttle-ը
   resetHudThrottle();
 
-  // HUD-ի reset
   document.getElementById('score').textContent = '0';
   document.getElementById('delivered').textContent = '0';
   document.getElementById('timer').textContent = '0:00';
 
-  // ⚠️ Camera-ն անմիջապես հետևից
   placeCameraBehindPlayer();
-
-  // Առաջին առաքելությունը
   startNewMission();
-
-  // Ողջույն
   showToast('🛵 Բարի գալուստ Երևան');
 
-  // Սկսում ենք loop-ը (եթե դեռ չի սկսվել)
   if (!animationId) {
     clock.start();
     gameLoop();
@@ -2292,25 +2271,20 @@ function startGame() {
 const startBtn = document.getElementById('startBtn');
 startBtn.addEventListener('click', startGame);
 
-// Enter-ով սկսել
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Enter' && !gameState.running) {
     startGame();
   }
 });
 
-// ========== INITIAL RENDER (before start) ==========
-// Սկզբում տեղադրում ենք camera-ն հետևից, որ start screen-ի
-// հետևում արդեն chase դիրքը լինի
+// ========== INITIAL RENDER ==========
 placeCameraBehindPlayer();
 renderer.render(scene, camera);
 
-// Սկսում ենք loop-ը անմիջապես
-// (physics-ը չի աշխատի մինչև startGame-ը չկանչվի)
 clock.start();
 gameLoop();
 
-// ========== FPS COUNTER (DEBUG միայն) ==========
+// ========== FPS COUNTER (DEBUG) ==========
 let fpsFrames = 0;
 let fpsLastTime = performance.now();
 
@@ -2324,19 +2298,186 @@ function updateFPS() {
   }
 }
 
-// ========== CLEANUP ON PAGE UNLOAD ==========
+// ========== CLEANUP ==========
 window.addEventListener('beforeunload', () => {
-  if (animationId) {
-    cancelAnimationFrame(animationId);
-  }
+  if (animationId) cancelAnimationFrame(animationId);
 });
 
-// ========== WELCOME LOG (DEBUG միայն) ==========
+// ========== WELCOME LOG (DEBUG) ==========
 if (DEBUG) {
   console.log('%c🛵 Երևանյան Առաքիչ', 'font-size: 24px; font-weight: 900; color: #ff6b35;');
   console.log('%cPrototype v1.0 — Chase Camera', 'font-size: 14px; color: #ffd166;');
   console.log('%cՕգտագործիր WASD կամ սլաքները քշելու համար', 'font-size: 12px; color: #888;');
 }
+
+// ============================================================
+// MOBILE TOUCH CONTROLS
+// ============================================================
+
+// ========== JOYSTICK ==========
+const joystickZone = document.getElementById('joystickZone');
+const joystickBase = document.getElementById('joystickBase');
+const joystickKnob = document.getElementById('joystickKnob');
+
+let joystickActive = false;
+let joystickTouchId = null;
+let joystickCenterX = 0;
+let joystickCenterY = 0;
+const JOYSTICK_RADIUS = 60;
+const DEAD_ZONE = 0.25;
+
+function getJoystickCenter() {
+  if (!joystickBase) return;
+  const rect = joystickBase.getBoundingClientRect();
+  joystickCenterX = rect.left + rect.width / 2;
+  joystickCenterY = rect.top + rect.height / 2;
+}
+
+function handleJoystickStart(e) {
+  if (joystickActive || !joystickBase) return;
+  const touch = e.changedTouches[0];
+  joystickTouchId = touch.identifier;
+  joystickActive = true;
+  getJoystickCenter();
+  handleJoystickMove(e);
+}
+
+function handleJoystickMove(e) {
+  if (!joystickActive) return;
+  let touch = null;
+  for (const t of e.changedTouches) {
+    if (t.identifier === joystickTouchId) {
+      touch = t;
+      break;
+    }
+  }
+  if (!touch) return;
+
+  let dx = touch.clientX - joystickCenterX;
+  let dy = touch.clientY - joystickCenterY;
+
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist > JOYSTICK_RADIUS) {
+    dx = (dx / dist) * JOYSTICK_RADIUS;
+    dy = (dy / dist) * JOYSTICK_RADIUS;
+  }
+
+  if (joystickKnob) {
+    joystickKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+  }
+
+  const nx = dx / JOYSTICK_RADIUS;
+  const ny = dy / JOYSTICK_RADIUS;
+
+  if (nx < -DEAD_ZONE) {
+    keys['KeyA'] = true;
+    keys['KeyD'] = false;
+  } else if (nx > DEAD_ZONE) {
+    keys['KeyD'] = true;
+    keys['KeyA'] = false;
+  } else {
+    keys['KeyA'] = false;
+    keys['KeyD'] = false;
+  }
+
+  if (ny < -DEAD_ZONE) {
+    keys['KeyW'] = true;
+    keys['KeyS'] = false;
+  } else if (ny > DEAD_ZONE) {
+    keys['KeyS'] = true;
+    keys['KeyW'] = false;
+  } else {
+    keys['KeyW'] = false;
+    keys['KeyS'] = false;
+  }
+}
+
+function handleJoystickEnd(e) {
+  if (!joystickActive) return;
+  let found = false;
+  for (const t of e.changedTouches) {
+    if (t.identifier === joystickTouchId) {
+      found = true;
+      break;
+    }
+  }
+  if (!found) return;
+
+  joystickActive = false;
+  joystickTouchId = null;
+
+  if (joystickKnob) {
+    joystickKnob.style.transform = 'translate(0px, 0px)';
+  }
+
+  keys['KeyA'] = false;
+  keys['KeyD'] = false;
+  keys['KeyW'] = false;
+  keys['KeyS'] = false;
+}
+
+if (joystickZone) {
+  joystickZone.addEventListener('touchstart', handleJoystickStart, { passive: false });
+  joystickZone.addEventListener('touchmove', handleJoystickMove, { passive: false });
+  joystickZone.addEventListener('touchend', handleJoystickEnd, { passive: false });
+  joystickZone.addEventListener('touchcancel', handleJoystickEnd, { passive: false });
+}
+
+// ========== ACTION BUTTONS ==========
+function bindTouchButton(btnId, keyCode) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+
+  btn.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    keys[keyCode] = true;
+    btn.classList.add('pressed');
+  }, { passive: false });
+
+  btn.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    keys[keyCode] = false;
+    btn.classList.remove('pressed');
+  }, { passive: false });
+
+  btn.addEventListener('touchcancel', () => {
+    keys[keyCode] = false;
+    btn.classList.remove('pressed');
+  }, { passive: false });
+
+  btn.addEventListener('mousedown', () => {
+    keys[keyCode] = true;
+    btn.classList.add('pressed');
+  });
+  btn.addEventListener('mouseup', () => {
+    keys[keyCode] = false;
+    btn.classList.remove('pressed');
+  });
+  btn.addEventListener('mouseleave', () => {
+    keys[keyCode] = false;
+    btn.classList.remove('pressed');
+  });
+}
+
+bindTouchButton('btnAccel', 'KeyW');
+bindTouchButton('btnBrake', 'KeyS');
+bindTouchButton('btnHandbrake', 'Space');
+
+// ========== PREVENT SCROLL & ZOOM ==========
+document.addEventListener('touchmove', (e) => {
+  if (!e.target.closest('#mobileControls')) {
+    e.preventDefault();
+  }
+}, { passive: false });
+
+let lastTouchEnd = 0;
+document.addEventListener('touchend', (e) => {
+  const now = Date.now();
+  if (now - lastTouchEnd <= 300) {
+    e.preventDefault();
+  }
+  lastTouchEnd = now;
+}, false);
 
 /* ============================================================
    ՎԵՐՋ 🎉
