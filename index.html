@@ -3,14 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Երևանյան Առաքիչ - Advanced Engine Prototype</title>
+    <title>Երևանյան Առաքիչ - Module 1: Core Physics Engine</title>
     <style>
-        * { box-sizing: border-box; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            margin: 0;
-            padding: 0;
-            background: #0f0f0f;
-            color: #f0f0f0;
+            background: #090909;
+            color: #e0e0e0;
             font-family: 'Courier New', Courier, monospace;
             display: flex;
             flex-direction: column;
@@ -19,75 +17,77 @@
             height: 100vh;
             overflow: hidden;
         }
-        #engine-wrapper {
+        #canvas-box {
             position: relative;
-            border: 2px solid #444;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
-            background: #1e1e1e;
+            border: 2px solid #333;
+            box-shadow: 0 25px 60px rgba(0,0,0,0.9);
+            background: #151515;
+            border-radius: 8px;
+            overflow: hidden;
         }
-        canvas {
-            display: block;
-        }
-        #hud {
+        canvas { display: block; }
+        #telemetry {
             position: absolute;
             top: 15px;
             left: 15px;
-            background: rgba(0, 0, 0, 0.85);
-            border: 1px solid #555;
+            background: rgba(10, 10, 10, 0.9);
+            border: 1px solid #444;
             padding: 15px;
             border-radius: 6px;
-            font-size: 13px;
+            font-size: 12px;
+            width: 310px;
             pointer-events: none;
-            width: 280px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
         }
-        .hud-row {
+        .tele-row {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 6px;
+            margin-bottom: 5px;
+            border-bottom: 1px solid #222;
+            padding-bottom: 3px;
         }
-        .hud-val {
-            color: #00ffcc;
-            font-weight: bold;
-        }
-        #console-log {
+        .tele-val { color: #00ffcc; font-weight: bold; }
+        #terminal-log {
             position: absolute;
             bottom: 15px;
             left: 15px;
             right: 15px;
-            background: rgba(10, 10, 10, 0.9);
-            border: 1px solid #444;
+            background: rgba(5, 5, 5, 0.95);
+            border: 1px solid #333;
             padding: 10px 15px;
             border-radius: 4px;
-            font-size: 12px;
+            font-size: 11px;
             color: #ffcc00;
         }
     </style>
 </head>
 <body>
 
-<div id="engine-wrapper">
-    <canvas id="gameCanvas" width="1024" height="768"></canvas>
+<div id="canvas-box">
+    <canvas id="coreCanvas" width="1280" height="720"></canvas>
     
-    <div id="hud">
-        <div class="hud-row"><span>Կերպար:</span> <span class="hud-val">Հնդիկ Առաքիչ</span></div>
-        <div class="hud-row"><span>Արագություն:</span> <span class="hud-val" id="val-speed">0.00 px/s</span></div>
-        <div class="hud-row"><span>Ընթացիկ Անկյուն:</span> <span class="hud-val" id="val-angle">0°</span></div>
-        <div class="hud-row"><span>Ռակուրսի Ինդեքս:</span> <span class="hud-val" id="val-view">Front (0)</span></div>
-        <div class="hud-row"><span>Կոորդինատներ:</span> <span class="hud-val" id="val-pos">X: 0, Y: 0</span></div>
+    <div id="telemetry">
+        <div class="tele-row"><span>Մոդուլի կարգավիճակ:</span> <span class="tele-val">ԱԿՏԻՎ (MOD-1)</span></div>
+        <div class="tele-row"><span>Քաշային Զանգված (Mass):</span> <span class="tele-val">1.45 kg</span></div>
+        <div class="tele-row"><span>Գծային Արագություն:</span> <span class="tele-val" id="t-speed">0.00 px/s</span></div>
+        <div class="tele-row"><span>Անկյունային Վեկտոր:</span> <span class="tele-val" id="t-angle">0.00°</span></div>
+        <div class="tele-row"><span>Ուղղության Ինդեքս (8-Dir):</span> <span class="tele-val" id="t-octant">0 - Front</span></div>
+        <div class="tele-row"><span>Դիրքը Տարածության մեջ:</span> <span class="tele-val" id="t-pos">X: 0, Y: 0</span></div>
     </div>
 
-    <div id="console-log">
-        [SYSTEM]: Ֆիզիկական շարժիչը և 8-ռակուրսային վեկտորային մենեջերը ակտիվ են։ Կառավարեք Սլաքներով (WASD / Arrows):
+    <div id="terminal-log">
+        [MODULE-1 SYSTEM]: Հիմնական վեկտորային մաթեմատիկան և ֆիզիկական միջուկը բեռնված են։ Սպասվում է Մոդուլ-2-ի միացմանը։
     </div>
 </div>
 
 <script>
 /**
- * -----------------------------------------------------------------
- * 1. ՎԵԿՏՈՐԱՅԻՆ ՄԱԹԵՄԱՏԻԿԱ ԵՎ ՖԻԶԻԿԱԿԱՆ ՄԻԱՎՈՐՆԵՐ
- * -----------------------------------------------------------------
+ * -------------------------------------------------------------------------
+ * ԵՐԵՎԱՆՅԱՆ ԱՌԱՔԻՉ - ՖԻԶԻԿԱԿԱՆ ԵՎ ՄԱԹԵՄԱՏԻԿԱԿԱՆ ՄԻՋՈՒԿ (MODUL-1)
+ * -------------------------------------------------------------------------
  */
-class Vector2 {
+
+class Vector2D {
     constructor(x = 0, y = 0) {
         this.x = x;
         this.y = y;
@@ -96,270 +96,235 @@ class Vector2 {
     add(v) { this.x += v.x; this.y += v.y; return this; }
     sub(v) { this.x -= v.x; this.y -= v.y; return this; }
     mult(n) { this.x *= n; this.y *= n; return this; }
-    mag() { return Math.sqrt(this.x * this.x + this.y * this.y); }
+    div(n) { if (n !== 0) { this.x /= n; this.y /= n; } return this; }
+    magSq() { return this.x * this.x + this.y * this.y; }
+    mag() { return Math.sqrt(this.magSq()); }
     normalize() {
         let m = this.mag();
-        if (m !== 0) this.mult(1 / m);
+        if (m !== 0) this.div(m);
         return this;
     }
+    copy() { return new Vector2D(this.x, this.y); }
+    static distance(v1, v2) {
+        let dx = v1.x - v2.x;
+        let dy = v1.y - v2.y;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
 }
 
-/**
- * -----------------------------------------------------------------
- * 2. 8-ՌԱԿՈՒՐՍԻ ՀԱՇՎԱՐԿԱՅԻՆ ՀԱՄԱԿԱՐԳ (Sprite Direction Manager)
- * -----------------------------------------------------------------
- */
-class SpriteDirectionManager {
-    /**
-     * Ընդունում է վեկտորը կամ անկյունը և վերադարձնում 8 հնարավոր ռակուրսներից մեկը
-     * 0: Front, 1: Front-Right, 2: Right, 3: Back-Right, 
-     * 4: Back, 5: Back-Left, 6: Left, 7: Front-Left
-     */
-    static getOctant(angleRadians) {
-        // Վերածում ենք 0 - 2*PI տիրույթի
-        let deg = (angleRadians * 180 / Math.PI) % 360;
-        if (deg < 0) deg += 360;
-
-        // 360 աստիճանը բաժանում ենք 8 հավասար մասի (յուրաքանչյուրը 45°)
-        let index = Math.floor((deg + 22.5) / 45) % 8;
+class PhysicsEngineCore {
+    constructor(canvas) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
         
-        const labels = [
-            "Front (Ուղիղ դիմացից)", 
-            "Front-Right (Դիմացի 3/4 աջ)", 
-            "Right (Աջ կողքից)", 
-            "Back-Right (Հետևի 3/4 աջ)", 
-            "Back (Ուղիղ հետևից)", 
-            "Back-Left (Հետևի 3/4 ձախ)", 
-            "Left (Ձախ կողքից)", 
-            "Front-Left (Դիմացի 3/4 ձախ)"
+        // Խաղացողի ֆիզիկական պարամետրեր
+        this.pos = new Vector2D(canvas.width / 2, canvas.height / 2);
+        this.velocity = new Vector2D(0, 0);
+        this.acceleration = new Vector2D(0, 0);
+        
+        this.maxSpeed = 6.0;
+        this.enginePower = 0.25;
+        this.friction = 0.085;
+        this.mass = 1.45;
+        
+        this.angle = 0; // Ռադիաններով
+        this.angularVelocity = 0;
+        this.rotationSpeed = 0.055;
+        
+        this.radius = 22; // Բախման հաշվարկային շառավիղ
+        
+        this.keys = { up: false, down: false, left: false, right: false };
+        this.initInputListeners();
+        
+        // Նախնական խոչընդոտներ (շենքերի բլոկներ)
+        this.obstacles = [
+            { x: 100, y: 100, w: 250, h: 160, name: "Շենք Կոմիտասում" },
+            { x: 930, y: 100, w: 250, h: 160, name: "Շենք Մաշտոցում" },
+            { x: 100, y: 460, w: 250, h: 160, name: "Շենք Աբովյանում" },
+            { x: 930, y: 460, w: 250, h: 160, name: "Շենք Հանրապետության" }
         ];
-        
-        return { index: index, label: labels[index], degrees: Math.round(deg) };
-    }
-}
-
-/**
- * -----------------------------------------------------------------
- * 3. ԽԱՂԱՑՈՂԻ ԵՎ ՏՐԱՆՍՊՈՐՏԻ ՖԻԶԻԿԱԿԱՆ ՄՈԴԵԼ
- * -----------------------------------------------------------------
- */
-class PlayerVehicle {
-    constructor(x, y) {
-        this.pos = new Vector2(x, y);
-        this.velocity = new Vector2(0, 0);
-        this.acceleration = 0.2;
-        this.maxSpeed = 5.5;
-        this.friction = 0.08;
-        this.angle = 0; // Շարժման ուղղություն
-        this.rotationSpeed = 0.05;
-        this.radius = 20; // Բախման շառավիղ
-        this.mass = 1.2;
     }
 
-    update(input, obstacles) {
-        // Շրջադարձեր
-        if (input.left) {
-            this.angle -= this.rotationSpeed * (this.velocity.mag() / this.maxSpeed + 0.2);
+    initInputListeners() {
+        window.addEventListener('keydown', (e) => this.handleKey(e, true));
+        window.addEventListener('keyup', (e) => this.handleKey(e, false));
+    }
+
+    handleKey(e, isDown) {
+        switch(e.code) {
+            case 'ArrowUp':
+            case 'KeyW':
+                this.keys.up = isDown; break;
+            case 'ArrowDown':
+            case 'KeyS':
+                this.keys.down = isDown; break;
+            case 'ArrowLeft':
+            case 'KeyA':
+                this.keys.left = isDown; break;
+            case 'ArrowRight':
+            case 'KeyD':
+                this.keys.right = isDown; break;
         }
-        if (input.right) {
-            this.angle += this.rotationSpeed * (this.velocity.mag() / this.maxSpeed + 0.2);
+    }
+
+    update() {
+        // 1. Անկյան կառավարում և շրջադարձային ֆիզիկա
+        if (this.keys.left) {
+            this.angle -= this.rotationSpeed * (this.velocity.mag() / this.maxSpeed + 0.3);
+        }
+        if (this.keys.right) {
+            this.angle += this.rotationSpeed * (this.velocity.mag() / this.maxSpeed + 0.3);
         }
 
-        // Առաջ և Հետ
-        let force = new Vector2(Math.sin(this.angle), -Math.cos(this.angle));
-        
-        if (input.up) {
-            this.velocity.x += force.x * this.acceleration;
-            this.velocity.y += force.y * this.acceleration;
-        } else if (input.down) {
-            this.velocity.x -= force.x * (this.acceleration * 0.5);
-            this.velocity.y -= force.y * (this.acceleration * 0.5);
+        // 2. Վեկտորային ուժի գեներացիա ըստ ուղղության
+        let forwardVector = new Vector2D(Math.sin(this.angle), -Math.cos(this.angle));
+
+        if (this.keys.up) {
+            this.acceleration = forwardVector.copy().mult(this.enginePower / this.mass);
+            this.velocity.add(this.acceleration);
+        } else if (this.keys.down) {
+            this.acceleration = forwardVector.copy().mult(-this.enginePower * 0.5 / this.mass);
+            this.velocity.add(this.acceleration);
         } else {
-            // Շփում (Friction)
+            // Շփման ուժի կիրառում (Friction damping)
             this.velocity.mult(1 - this.friction);
         }
 
-        // Արագության սահմանափակում
+        // Արագության սահմանափակում (Clamping)
         let currentSpeed = this.velocity.mag();
         if (currentSpeed > this.maxSpeed) {
             this.velocity.normalize().mult(this.maxSpeed);
         }
 
-        // Հետագծի կանխատեսում և բախումների ստուգում շենքերի/եզրերի հետ
-        let nextX = this.pos.x + this.velocity.x;
-        let nextY = this.pos.y + this.velocity.y;
+        // Հաջորդ կոորդինատի կանխատեսում բախումների ստուգման համար
+        let nextPosX = this.pos.x + this.velocity.x;
+        let nextPosY = this.pos.y + this.velocity.y;
 
-        // Սահմանափակում քարտեզի շրջանակներում + շենքերի բախումներ
-        if (this.checkCollisionWithWorld(nextX, nextY, obstacles)) {
-            // Բախման դեպքում մարում ենք արագությունը (էլաստիկության գործակից)
-            this.velocity.mult(-0.3);
+        // 3. Բախումների ստուգում աշխարհի սահմանների և շենքերի հետ
+        let collided = this.resolveWorldCollisions(nextPosX, nextPosY);
+        if (!collided) {
+            this.pos.x = nextPosX;
+            this.pos.y = nextPosY;
         } else {
-            this.pos.x = nextX;
-            this.pos.y = nextY;
+            // Անկյունային արտացոլում և հարվածի էներգիայի կորուստ
+            this.velocity.mult(-0.35);
         }
+
+        this.updateTelemetry(currentSpeed);
     }
 
-    checkCollisionWithWorld(x, y, obstacles) {
-        // Էկրանի եզրեր
-        if (x < 30 || x > 1024 - 30 || y < 30 || y > 768 - 30) return true;
+    resolveWorldCollisions(nx, ny) {
+        // Սահմաններ
+        if (nx < this.radius || nx > this.canvas.width - this.radius) return true;
+        if (ny < this.radius || ny > this.canvas.height - this.radius) return true;
 
-        // Շենքերի ուղղանկյուն բախումներ
-        for (let obs of obstacles) {
-            if (x > obs.x && x < obs.x + obs.w && y > obs.y && y < obs.y + obs.h) {
+        // Շենքերի ուղղանկյուն բախումներ (AABB Collision Detection)
+        for (let obs of this.obstacles) {
+            if (nx + this.radius > obs.x && nx - this.radius < obs.x + obs.w &&
+                ny + this.radius > obs.y && ny - this.radius < obs.y + obs.h) {
                 return true;
             }
         }
         return false;
     }
 
-    draw(ctx) {
-        ctx.save();
-        ctx.translate(this.pos.x, this.pos.y);
-        ctx.rotate(this.angle);
-
-        // Ժամանակավոր գրաֆիկական վեկտորային մակետ (մինչև նկարները դնելը)
-        // Սկուտերի հիմք
-        ctx.fillStyle = '#ffcc00';
-        ctx.fillRect(-12, -18, 24, 36);
-
-        // Առաքման պայուսակ
-        ctx.fillStyle = '#cc3333';
-        ctx.fillRect(-14, 6, 28, 16);
-
-        // Հերոսի գլուխ / սաղավարտ
-        ctx.fillStyle = '#111';
-        ctx.beginPath();
-        ctx.arc(0, -4, 7, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.restore();
-    }
-}
-
-/**
- * -----------------------------------------------------------------
- * 4. ԽԱՂԻ ՀԻՄՆԱԿԱՆ ՇԱՐԺԻՉԻ ԿԱՌՈՒՑՎԱԾՔ (Game Engine Core)
- * -----------------------------------------------------------------
- */
-class GameEngine {
-    constructor() {
-        this.canvas = document.getElementById('gameCanvas');
-        this.ctx = this.canvas.getContext('2d');
-        
-        this.player = new PlayerVehicle(512, 384);
-        
-        this.input = { up: false, down: false, left: false, right: false };
-        
-        // Երևանյան փողոցների շենքերի բլոկներ (արգելափակոցներ)
-        this.obstacles = [
-            { x: 80, y: 80, w: 220, h: 140 },
-            { x: 380, y: 80, w: 260, h: 140 },
-            { x: 720, y: 80, w: 220, h: 140 },
-            { x: 80, y: 540, w: 220, h: 140 },
-            { x: 380, y: 540, w: 260, h: 140 },
-            { x: 720, y: 540, w: 220, h: 140 }
+    getOctantInfo() {
+        let deg = (this.angle * 180 / Math.PI) % 360;
+        if (deg < 0) deg += 360;
+        let octantIndex = Math.floor((deg + 22.5) / 45) % 8;
+        const labels = [
+            "0 - Front (Ուղիղ դիմացից)",
+            "1 - Front-Right (Դիմացի 3/4 աջ)",
+            "2 - Right (Աջ կողքից)",
+            "3 - Back-Right (Հետևի 3/4 աջ)",
+            "4 - Back (Ուղիղ հետևից)",
+            "5 - Back-Left (Հետևի 3/4 ձախ)",
+            "6 - Left (Ձախ կողքից)",
+            "7 - Front-Left (Դիմացի 3/4 ձախ)"
         ];
-
-        this.initListeners();
+        return { index: octantIndex, label: labels[octantIndex], degrees: deg.toFixed(1) };
     }
 
-    initListeners() {
-        window.addEventListener('keydown', (e) => this.handleKey(e, true));
-        window.addEventListener('keyup', (e) => this.handleKey(e, false));
-    }
-
-    handleKey(e, isDown) {
-        switch(e.key) {
-            case 'ArrowUp':
-            case 'w':
-            case 'W':
-                this.input.up = isDown; break;
-            case 'ArrowDown':
-            case 's':
-            case 'S':
-                this.input.down = isDown; break;
-            case 'ArrowLeft':
-            case 'a':
-            case 'A':
-                this.input.left = isDown; break;
-            case 'ArrowRight':
-            case 'd':
-            case 'D':
-                this.input.right = isDown; break;
-        }
-    }
-
-    update() {
-        this.player.update(this.input, this.obstacles);
-        this.updateHUD();
-    }
-
-    updateHUD() {
-        let speedMag = this.player.velocity.mag().toFixed(2);
-        let octantInfo = SpriteDirectionManager.getOctant(this.player.angle);
-
-        document.getElementById('val-speed').innerText = speedMag + ' px/f';
-        document.getElementById('val-angle').innerText = octantInfo.degrees + '°';
-        document.getElementById('val-view').innerText = octantInfo.label;
-        document.getElementById('val-pos').innerText = `X: ${Math.round(this.player.pos.x)}, Y: ${Math.round(this.player.pos.y)}`;
+    updateTelemetry(speed) {
+        let oct = this.getOctantInfo();
+        document.getElementById('t-speed').innerText = (speed * 15).toFixed(1) + ' կմ/ժ';
+        document.getElementById('t-angle').innerText = oct.degrees + '°';
+        document.getElementById('t-octant').innerText = oct.label;
+        document.getElementById('t-pos').innerText = `X: ${Math.round(this.pos.x)}, Y: ${Math.round(this.pos.y)}`;
     }
 
     renderEnvironment() {
-        // Փողոցների ֆոն (Ասֆալտ)
-        this.ctx.fillStyle = '#222222';
+        // Ասֆալտի ֆոն
+        this.ctx.fillStyle = '#1c1c1c';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // Խաչվող փողոցներ
-        this.ctx.fillStyle = '#2b2b2b';
-        this.ctx.fillRect(0, 280, this.canvas.width, 208); // Հորիզոնական մեծ փողոց
-        this.ctx.fillRect(340, 0, 344, this.canvas.height); // Ուղղահայաց մեծ փողոց
+        // Փողոցային խաչվող մատրիցա
+        this.ctx.fillStyle = '#262626';
+        this.ctx.fillRect(0, 260, this.canvas.width, 200); // Հորիզոնական պողոտա
+        this.ctx.fillRect(380, 0, 520, this.canvas.height); // Ուղղահայաց պողոտա
 
-        // Դեղին և սպիտակ գծանշումներ
-        this.ctx.strokeStyle = '#ffcc00';
+        // Դեղին բաժանարար գծեր
+        this.ctx.strokeStyle = '#e6b800';
         this.ctx.lineWidth = 3;
-        this.ctx.setLineDash([15, 15]);
+        this.ctx.setLineDash([20, 15]);
         this.ctx.beginPath();
-        this.ctx.moveTo(0, 384); this.ctx.lineTo(this.canvas.width, 384);
-        this.ctx.moveTo(512, 0); this.ctx.lineTo(512, this.canvas.height);
+        this.ctx.moveTo(0, 360); this.ctx.lineTo(this.canvas.width, 360);
+        this.ctx.moveTo(640, 0); this.ctx.lineTo(640, this.canvas.height);
         this.ctx.stroke();
         this.ctx.setLineDash([]);
 
-        // Շենքեր (Բլոկներ)
-        this.ctx.fillStyle = '#3a444c';
-        this.ctx.strokeStyle = '#55626d';
-        this.ctx.lineWidth = 2;
+        // Շենքեր / Արգելափակոցներ
+        this.ctx.fillStyle = '#2f3640';
+        this.ctx.strokeStyle = '#485460';
+        this.ctx.lineWidth = 3;
         for (let obs of this.obstacles) {
             this.ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
             this.ctx.strokeRect(obs.x, obs.y, obs.w, obs.h);
             
-            // Շենքերի ներքին տեքստային ձևավորում
-            this.ctx.fillStyle = '#778899';
-            this.ctx.font = '11px Courier New';
-            this.ctx.fillText("ՇԵՆՔ / ԲՆԱԿԵԼԻ", obs.x + 15, obs.y + 25);
-            this.ctx.fillStyle = '#3a444c';
+            // Շենքի անվանումը վրան
+            this.ctx.fillStyle = '#718093';
+            this.ctx.font = '12px Courier New';
+            this.ctx.fillText(obs.name.toUpperCase(), obs.x + 15, obs.y + 25);
         }
     }
 
-    render() {
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        this.renderEnvironment();
-        this.player.draw(this.ctx);
+    renderPlayer() {
+        this.ctx.save();
+        this.ctx.translate(this.pos.x, this.pos.y);
+        this.ctx.rotate(this.angle);
+
+        // Մակետային վեկտորային սկուտեր (մինչև 8 ռակուրսի PNG նկարները միացնելը)
+        this.ctx.fillStyle = '#fbc531';
+        this.ctx.fillRect(-12, -20, 24, 40);
+
+        // Առաքման պայուսակ հետևում
+        this.ctx.fillStyle = '#e74c3c';
+        this.ctx.fillRect(-14, 6, 28, 18);
+
+        // Վարորդի գլուխ / սաղավարտ
+        this.ctx.fillStyle = '#2f3640';
+        this.ctx.beginPath();
+        this.ctx.arc(0, -5, 8, 0, Math.PI * 2);
+        this.ctx.fill();
+
+        this.ctx.restore();
     }
 
     run() {
-        const loop = () => {
+        const frameLoop = () => {
             this.update();
-            this.render();
-            requestAnimationFrame(loop);
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            this.renderEnvironment();
+            this.renderPlayer();
+            requestAnimationFrame(frameLoop);
         };
-        requestAnimationFrame(loop);
+        requestAnimationFrame(frameLoop);
     }
 }
 
-// Գործարկում ենք շարժիչը բրաուզերի բեռնմանը զուգընթաց
 window.onload = () => {
-    const engine = new GameEngine();
-    engine.run();
+    const core = new PhysicsEngineCore(document.getElementById('coreCanvas'));
+    core.run();
 };
 </script>
 
