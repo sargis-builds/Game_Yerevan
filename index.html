@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Նոր կյանք Երևանում - Առաքիչի Արկածները</title>
+    <title>Երևանյան Առաքիչ - Prototype</title>
     <style>
         body {
             margin: 0;
             padding: 0;
-            background: #1a1a1a;
+            background-color: #1a1a1a;
+            color: #ffffff;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            color: #fff;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -20,198 +20,229 @@
         }
         #game-container {
             position: relative;
-            width: 800px;
-            height: 500px;
-            background: #2c3e50;
-            border: 4px solid #f1c40f;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border: 4px solid #333;
             border-radius: 8px;
             overflow: hidden;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
         }
         canvas {
             display: block;
-            background: #34495e;
+            background: #2b2b2b;
         }
         #ui-panel {
             position: absolute;
             top: 10px;
             left: 10px;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 10px 15px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 12px 18px;
             border-radius: 6px;
             font-size: 14px;
             pointer-events: none;
+            border-left: 4px solid #ffcc00;
         }
         #order-panel {
             position: absolute;
             bottom: 10px;
             left: 10px;
             right: 10px;
-            background: rgba(44, 62, 80, 0.9);
+            background: rgba(20, 20, 20, 0.9);
             padding: 12px;
             border-radius: 6px;
-            border: 1px solid #f1c40f;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            border: 1px solid #444;
         }
         .btn {
-            background: #e74c3c;
-            color: white;
+            background: #ffcc00;
+            color: #000;
             border: none;
             padding: 8px 15px;
+            font-weight: bold;
             border-radius: 4px;
             cursor: pointer;
-            font-weight: bold;
         }
-        .btn:hover { background: #c0392b; }
+        .btn:hover {
+            background: #ffdb4d;
+        }
+        #instructions {
+            margin-top: 10px;
+            font-size: 13px;
+            color: #aaa;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
 
     <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        
         <div id="ui-panel">
-            <div>Հաշիվ/Գումար: <span id="money">0</span> ֏</div>
-            <div>Վարկանիշ: <span id="reputation">100</span>%</div>
-            <div>Կարգավիճակ: <span id="status">Փնտրում է պատվեր...</span></div>
+            <div><strong>Կերպար:</strong> Հնդիկ առաքիչ 🛵</div>
+            <div><strong>Միավորներ:</strong> <span id="score">0</span> ֏</div>
+            <div><strong>Վարկանիշ:</strong> ⭐⭐⭐⭐⭐</div>
         </div>
 
-        <canvas id="gameCanvas" width="800" height="500"></canvas>
-
         <div id="order-panel">
-            <div id="order-text">Պատվեր չկա։ Սեղմեք «Նոր պատվեր» ստանալու համար։</div>
-            <button class="btn" onclick="getNewOrder()">Վերցնել պատվեր</button>
+            <div>
+                <div id="order-text" style="font-weight: bold; color: #ffcc00;">Առաքում #7A-391 սպասում է...</div>
+                <div id="order-address" style="font-size: 12px; color: #ccc;">Հասցե՝ Կոմիտաս 12/3 (GPS-ը սխալ է ցույց տալիս 😄)</div>
+            </div>
+            <button class="btn" onclick="acceptOrder()">Վերցնել պատվերը</button>
         </div>
     </div>
 
-<script>
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
+    <div id="instructions">
+        Կառավարում՝ <strong>SLAQ / Սլաքներ</strong> (Վերև՝ արագացում, Աջ/Ձախ՝ շրջադարձ, Ներքև՝ արգելակ/հետընթաց)
+    </div>
 
-    // խաղացողի և աշխարհի փոփոխականներ
-    let player = {
-        x: 400,
-        y: 250,
-        speed: 3,
-        angle: 0, // 0-ից 7 (8 ռակուրսների համար)
-        money: 0,
-        reputation: 100
-    };
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
 
-    let currentOrder = null;
-    let keys = {};
-
-    // Ստեղնաշարի կառավարում
-    window.addEventListener('keydown', (e) => keys[e.key] = true);
-    window.addEventListener('keyup', (e) => keys[e.key] = false);
-
-    function getNewOrder() {
-        const streets = ["Կոմիտաս", "Մաշտոց", "Աբովյան", "Բաղրամյան", "Հյուսիսային պողոտա"];
-        const fromStreet = streets[Math.floor(Math.random() * streets.length)];
-        const toStreet = streets[Math.floor(Math.random() * streets.length)];
-        const code = "A-" + Math.floor(100 + Math.random() * 900);
-
-        currentOrder = {
-            code: code,
-            route: `${fromStreet} -> ${toStreet}`,
-            reward: 1500
+        // Խաղացողի (սկուտերի) տվյալներ
+        let player = {
+            x: 400,
+            y: 300,
+            width: 30,
+            height: 45,
+            angle: 0, // ուղղությունը ռադիաններով
+            speed: 0,
+            maxSpeed: 4,
+            acceleration: 0.15,
+            friction: 0.05,
+            rotationSpeed: 0.04
         };
 
-        document.getElementById('order-text').innerHTML = `
-            <b>Պատվեր #${code}</b><br>
-            Ուղղություն՝ ${currentOrder.route}<br>
-            Վարձատրություն՝ ${currentOrder.reward} ֏
-        `;
-        document.getElementById('status').innerText = "Առաքվում է...";
-    }
+        // Ստեղնաշարի սեղմումների կարգավորում
+        let keys = {
+            ArrowUp: false,
+            ArrowDown: false,
+            ArrowLeft: false,
+            ArrowRight: false
+        };
 
-    function update() {
-        // Շարժման տրամաբանություն (Արասացում / Ուղղություն)
-        let moving = false;
-        if (keys['ArrowUp'] || keys['w']) {
-            player.y -= player.speed;
-            player.angle = 0; // Դիմաց
-            moving = true;
-        }
-        if (keys['ArrowDown'] || keys['s']) {
-            player.y += player.speed;
-            player.angle = 4; // Հետև
-            moving = true;
-        }
-        if (keys['ArrowLeft'] || keys['a']) {
-            player.x -= player.speed;
-            player.angle = 6; // Ձախ
-            moving = true;
-        }
-        if (keys['ArrowRight'] || keys['d']) {
-            player.x += player.speed;
-            player.angle = 2; // Աջ
-            moving = true;
+        window.addEventListener('keydown', (e) => {
+            if (keys.hasOwnProperty(e.key)) keys[e.key] = true;
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (keys.hasOwnProperty(e.key)) keys[e.key] = false;
+        });
+
+        let score = 0;
+        let activeOrder = true;
+
+        function acceptOrder() {
+            score += 500;
+            document.getElementById('score').innerText = score;
+            document.getElementById('order-text').innerText = "Պատվերը հաջողությամբ հասցվեց! 🎉";
+            setTimeout(() => {
+                document.getElementById('order-text').innerText = "Նոր պատվեր #8B-104: Մաշտոցի 25";
+            }, 3000);
         }
 
-        // Սահմաններ
-        if (player.x < 30) player.x = 30;
-        if (player.x > canvas.width - 30) player.x = canvas.width - 30;
-        if (player.y < 30) player.y = 30;
-        if (player.y > canvas.height - 30) player.y = canvas.height - 30;
-    }
+        // Հիմնական խաղային ցիկլ
+        function update() {
+            // Շրջադարձեր
+            if (keys.ArrowLeft) {
+                player.angle -= player.rotationSpeed * (player.speed / player.maxSpeed || 0.5);
+            }
+            if (keys.ArrowRight) {
+                player.angle += player.rotationSpeed * (player.speed / player.maxSpeed || 0.5);
+            }
 
-    function draw() {
-        // Մաքրել էկրանը (Երևանյան փողոցի ֆոն)
-        ctx.fillStyle = '#2c3e50';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+            // Արագացում և արգելակում
+            if (keys.ArrowUp) {
+                player.speed += player.acceleration;
+                if (player.speed > player.maxSpeed) player.speed = player.maxSpeed;
+            } else if (keys.ArrowDown) {
+                player.speed -= player.acceleration;
+                if (player.speed < -player.maxSpeed / 2) player.speed = -player.maxSpeed / 2;
+            } else {
+                // Մերժում/շփում (friction)
+                if (player.speed > 0) player.speed -= player.friction;
+                if (player.speed < 0) player.speed += player.friction;
+                if (Math.abs(player.speed) < 0.05) player.speed = 0;
+            }
 
-        // Գծել պայմանական փողոցներ (Խաչմերուկներ)
-        ctx.strokeStyle = '#7f8c8d';
-        ctx.lineWidth = 60;
-        ctx.beginPath();
-        ctx.moveTo(0, 250); ctx.lineTo(800, 250);
-        ctx.moveTo(400, 0); ctx.lineTo(400, 500);
-        ctx.stroke();
+            // Դիրքի փոփոխություն ըստ անկյան
+            player.x += Math.sin(player.angle) * player.speed;
+            player.y -= Math.cos(player.angle) * player.speed;
 
-        // Ճանապարհային գծանշումներ
-        ctx.strokeStyle = '#f1c40f';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([10, 10]);
-        ctx.beginPath();
-        ctx.moveTo(0, 250); ctx.lineTo(800, 250);
-        ctx.moveTo(400, 0); ctx.lineTo(400, 500);
-        ctx.stroke();
-        ctx.setLineDash([]);
+            // Էկրանի սահմաններ
+            if (player.x < 20) player.x = 20;
+            if (player.x > canvas.width - 20) player.x = canvas.width - 20;
+            if (player.y < 20) player.y = 20;
+            if (player.y > canvas.height - 70) player.y = canvas.height - 70;
+        }
 
-        // Գծել շենքերը (կողային հատվածներ)
-        ctx.fillStyle = '#34495e';
-        ctx.fillRect(50, 50, 120, 120);
-        ctx.fillRect(600, 50, 150, 120);
-        ctx.fillRect(50, 330, 120, 120);
-        ctx.fillRect(600, 330, 150, 120);
+        function drawEnvironment() {
+            // Երևանյան փողոցների ֆոն և խաչմերուկներ
+            ctx.fillStyle = '#3a3a3a';
+            ctx.fillRect(0, 220, canvas.width, 160); // Հորիզոնական փողոց
+            ctx.fillRect(320, 0, 160, canvas.height); // Ուղղահայաց փողոց
 
-        // Գծել խաղացողին (Սկուտեր + Հնդիկ առաքիչի պայմանական նշան)
-        ctx.save();
-        ctx.translate(player.x, player.y);
-        
-        // Առաքիչի մարմին/սկուտեր (Այստեղ հետագայում կդրվի 8 ռակուրսներից մեկի PNG նկարը)
-        ctx.fillStyle = '#e67e22';
-        ctx.beginPath();
-        ctx.arc(0, 0, 18, 0, Math.PI * 2);
-        ctx.fill();
+            // Խաչմերուկի գծանշումներ
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([10, 10]);
+            
+            // Դեղին գիծ փողոցի մեջտեղում
+            ctx.beginPath();
+            ctx.moveTo(0, 300); ctx.lineTo(800, 300);
+            ctx.moveTo(400, 0); ctx.lineTo(400, 600);
+            ctx.stroke();
+            ctx.setLineDash([]);
 
-        ctx.fillStyle = '#fff';
-        ctx.font = '12px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(`🛵 [${player.angle}]`, 0, -22);
+            // Շենքերի բլոկներ (անկյուններում)
+            ctx.fillStyle = '#4d5b64';
+            ctx.fillRect(50, 50, 220, 120);
+            ctx.fillRect(520, 50, 230, 120);
+            ctx.fillRect(50, 420, 220, 120);
+            ctx.fillRect(520, 420, 230, 120);
+        }
 
-        ctx.restore();
-    }
+        function drawPlayer() {
+            ctx.save();
+            ctx.translate(player.x, player.y);
+            ctx.rotate(player.angle);
 
-    function loop() {
-        update();
-        draw();
-        requestAnimationFrame(loop);
-    }
+            // Այստեղ հետագայում կդրվի 8 ռակուրսներից մեկի PNG նկարը (Image object-ի միջոցով)
+            // Այժմ նկարում ենք ժամանակավոր սկուտեր և առաքիչ ձևավորում
+            
+            // Սկուտերի մարմին
+            ctx.fillStyle = '#ffcc00';
+            ctx.fillRect(-10, -15, 20, 30);
 
-    loop();
-</script>
+            // Առաքման պայուսակ հետևում
+            ctx.fillStyle = '#d9534f';
+            ctx.fillRect(-12, 5, 24, 15);
 
+            // Հնդիկ առաքիչի սաղավարտ / գլուխ
+            ctx.fillStyle = '#222';
+            ctx.beginPath();
+            ctx.arc(0, -5, 7, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawEnvironment();
+            drawPlayer();
+        }
+
+        function gameLoop() {
+            update();
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Սկսել խաղային լուպը
+        gameLoop();
+    </script>
 </body>
 </html>
