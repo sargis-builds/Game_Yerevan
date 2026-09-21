@@ -294,20 +294,28 @@ window.addEventListener('resize', () => {
 // Քաղաքը 200x200 մետր է, փողոցները ցանց են կազմում
 // Ամեն փողոց 8 մետր լայնություն ունի
 
+/* ============================================================
+   ՄԱՍ 3 — STREETS + SIDEWALKS + ROAD MARKINGS (ՃՇՏՏՎԱԾ)
+   ============================================================ */
+
+// ========== STREET NETWORK ==========
+// Փողոցները տարբեր լայնությունների են։
+// Կենտրոնական պողոտան ամենալայնն է (14մ)։
+
 const STREETS = [
   // Հորիզոնական փողոցներ (z-ը հաստատուն)
-  { x1: -100, x2: 100, z1: -4,  z2: 4  },  // Կենտրոնական պողոտա
-  { x1: -100, x2: 100, z1: -40, z2: -32 },
-  { x1: -100, x2: 100, z1: -76, z2: -68 },
-  { x1: -100, x2: 100, z1: 32,  z2: 40 },
-  { x1: -100, x2: 100, z1: 68,  z2: 76 },
+  { x1: -100, x2: 100, z1: -7,  z2: 7,   width: 14, type: 'avenue' },
+  { x1: -100, x2: 100, z1: -41, z2: -31, width: 10, type: 'main' },
+  { x1: -100, x2: 100, z1: -75, z2: -68, width: 7,  type: 'small' },
+  { x1: -100, x2: 100, z1: 31,  z2: 41,  width: 10, type: 'main' },
+  { x1: -100, x2: 100, z1: 68,  z2: 75,  width: 7,  type: 'small' },
 
   // Ուղղահայաց փողոցներ (x-ը հաստատուն)
-  { z1: -100, z2: 100, x1: -4,  x2: 4  },
-  { z1: -100, z2: 100, x1: -40, x2: -32 },
-  { z1: -100, z2: 100, x1: -76, x2: -68 },
-  { z1: -100, z2: 100, x1: 32,  x2: 40 },
-  { z1: -100, z2: 100, x1: 68,  x2: 76 },
+  { z1: -100, z2: 100, x1: -7,  x2: 7,   width: 14, type: 'avenue' },
+  { z1: -100, z2: 100, x1: -41, x2: -31, width: 10, type: 'main' },
+  { z1: -100, z2: 100, x1: -75, x2: -68, width: 7,  type: 'small' },
+  { z1: -100, z2: 100, x1: 31,  x2: 41,  width: 10, type: 'main' },
+  { z1: -100, z2: 100, x1: 68,  x2: 75,  width: 7,  type: 'small' },
 ];
 
 // ========== MATERIALS ==========
@@ -317,10 +325,21 @@ const streetMat = new THREE.MeshStandardMaterial({
   metalness: 0
 });
 
+const avenueMat = new THREE.MeshStandardMaterial({
+  color: 0x353535,
+  roughness: 0.9,
+  metalness: 0
+});
+
 const sidewalkMat = new THREE.MeshStandardMaterial({
   color: 0xb8b8b8,
   roughness: 0.9,
   metalness: 0
+});
+
+const curbMat = new THREE.MeshStandardMaterial({
+  color: 0x888888,
+  roughness: 0.85
 });
 
 const dashMat = new THREE.MeshStandardMaterial({
@@ -335,6 +354,10 @@ const crosswalkMat = new THREE.MeshStandardMaterial({
   roughness: 0.8
 });
 
+// ========== SIDEWALK DATA (for collision) ==========
+// Մայթերի տվյալները կոլիզիայի համար
+const sidewalks = [];
+
 // ========== BUILD STREETS ==========
 STREETS.forEach(s => {
   const w = s.x2 - s.x1;
@@ -344,20 +367,21 @@ STREETS.forEach(s => {
   const isHorizontal = w > d;
 
   // --- Road surface ---
+  const roadMat = s.type === 'avenue' ? avenueMat : streetMat;
   const road = new THREE.Mesh(
     new THREE.BoxGeometry(w, 0.05, d),
-    streetMat
+    roadMat
   );
   road.position.set(cx, 0.03, cz);
   road.receiveShadow = true;
   scene.add(road);
 
   // --- Sidewalks (2 կողմից) ---
-  const sw = 1.2;
-  const swHeight = 0.22;
+  const sw = 1.5;
+  const swHeight = 0.25;
 
   if (isHorizontal) {
-    // Վերին մայթ
+    // Վերին մայթ (հյուսիս)
     const s1 = new THREE.Mesh(
       new THREE.BoxGeometry(w, swHeight, sw),
       sidewalkMat
@@ -367,7 +391,7 @@ STREETS.forEach(s => {
     s1.castShadow = true;
     scene.add(s1);
 
-    // Ներքևի մայթ
+    // Ներքևի մայթ (հարավ)
     const s2 = new THREE.Mesh(
       new THREE.BoxGeometry(w, swHeight, sw),
       sidewalkMat
@@ -376,8 +400,36 @@ STREETS.forEach(s => {
     s2.receiveShadow = true;
     s2.castShadow = true;
     scene.add(s2);
+
+    // Կոլիզիայի տվյալներ
+    sidewalks.push({
+      minX: s.x1, maxX: s.x2,
+      minZ: s.z1 - sw, maxZ: s.z1
+    });
+    sidewalks.push({
+      minX: s.x1, maxX: s.x2,
+      minZ: s.z2, maxZ: s.z2 + sw
+    });
+
+    // Curb (եզրաքար) — վերին
+    const curb1 = new THREE.Mesh(
+      new THREE.BoxGeometry(w, 0.3, 0.15),
+      curbMat
+    );
+    curb1.position.set(cx, 0.15, s.z1 - 0.075);
+    curb1.castShadow = true;
+    scene.add(curb1);
+
+    // Curb — ներքևի
+    const curb2 = new THREE.Mesh(
+      new THREE.BoxGeometry(w, 0.3, 0.15),
+      curbMat
+    );
+    curb2.position.set(cx, 0.15, s.z2 + 0.075);
+    curb2.castShadow = true;
+    scene.add(curb2);
   } else {
-    // Ձախ մայթ
+    // Ձախ մայթ (արևմուտք)
     const s1 = new THREE.Mesh(
       new THREE.BoxGeometry(sw, swHeight, d),
       sidewalkMat
@@ -387,7 +439,7 @@ STREETS.forEach(s => {
     s1.castShadow = true;
     scene.add(s1);
 
-    // Աջ մայթ
+    // Աջ մայթ (արևելք)
     const s2 = new THREE.Mesh(
       new THREE.BoxGeometry(sw, swHeight, d),
       sidewalkMat
@@ -396,39 +448,106 @@ STREETS.forEach(s => {
     s2.receiveShadow = true;
     s2.castShadow = true;
     scene.add(s2);
+
+    // Կոլիզիայի տվյալներ
+    sidewalks.push({
+      minX: s.x1 - sw, maxX: s.x1,
+      minZ: s.z1, maxZ: s.z2
+    });
+    sidewalks.push({
+      minX: s.x2, maxX: s.x2 + sw,
+      minZ: s.z1, maxZ: s.z2
+    });
+
+    // Curb — ձախ
+    const curb1 = new THREE.Mesh(
+      new THREE.BoxGeometry(0.15, 0.3, d),
+      curbMat
+    );
+    curb1.position.set(s.x1 - 0.075, 0.15, cz);
+    curb1.castShadow = true;
+    scene.add(curb1);
+
+    // Curb — աջ
+    const curb2 = new THREE.Mesh(
+      new THREE.BoxGeometry(0.15, 0.3, d),
+      curbMat
+    );
+    curb2.position.set(s.x2 + 0.075, 0.15, cz);
+    curb2.castShadow = true;
+    scene.add(curb2);
   }
 
   // --- Center dashed line ---
-  const length = Math.max(w, d);
-  const dashCount = Math.floor(length / 8);
-  const dashLength = 3;
-  const dashGap = 5;
+  // Միայն մեծ փողոցների ու պողոտայի վրա
+  if (s.type === 'avenue' || s.type === 'main') {
+    const length = Math.max(w, d);
+    const dashCount = Math.floor(length / 8);
+    const dashLength = 3;
 
-  for (let i = 0; i < dashCount; i++) {
-    const t = (i + 0.5) / dashCount;
-    const dash = new THREE.Mesh(
-      new THREE.BoxGeometry(
-        isHorizontal ? dashLength : 0.2,
-        0.06,
-        isHorizontal ? 0.2 : dashLength
-      ),
-      dashMat
-    );
+    for (let i = 0; i < dashCount; i++) {
+      const t = (i + 0.5) / dashCount;
+      const dash = new THREE.Mesh(
+        new THREE.BoxGeometry(
+          isHorizontal ? dashLength : 0.2,
+          0.06,
+          isHorizontal ? 0.2 : dashLength
+        ),
+        dashMat
+      );
+
+      if (isHorizontal) {
+        dash.position.set(s.x1 + w * t, 0.06, cz);
+      } else {
+        dash.position.set(cx, 0.06, s.z1 + d * t);
+      }
+      scene.add(dash);
+    }
+  }
+
+  // --- Avenue side lines ---
+  if (s.type === 'avenue') {
+    const lineMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      emissive: 0x333333,
+      emissiveIntensity: 0.2
+    });
 
     if (isHorizontal) {
-      dash.position.set(s.x1 + w * t, 0.06, cz);
+      const line1 = new THREE.Mesh(
+        new THREE.BoxGeometry(w, 0.06, 0.15),
+        lineMat
+      );
+      line1.position.set(cx, 0.06, s.z1 + 0.5);
+      scene.add(line1);
+
+      const line2 = new THREE.Mesh(
+        new THREE.BoxGeometry(w, 0.06, 0.15),
+        lineMat
+      );
+      line2.position.set(cx, 0.06, s.z2 - 0.5);
+      scene.add(line2);
     } else {
-      dash.position.set(cx, 0.06, s.z1 + d * t);
+      const line1 = new THREE.Mesh(
+        new THREE.BoxGeometry(0.15, 0.06, d),
+        lineMat
+      );
+      line1.position.set(s.x1 + 0.5, 0.06, cz);
+      scene.add(line1);
+
+      const line2 = new THREE.Mesh(
+        new THREE.BoxGeometry(0.15, 0.06, d),
+        lineMat
+      );
+      line2.position.set(s.x2 - 0.5, 0.06, cz);
+      scene.add(line2);
     }
-    scene.add(dash);
   }
 });
 
 // ========== CROSSWALKS AT INTERSECTIONS ==========
-// Խաչմերուկներում հետիոտնային անցումներ
 const intersections = [];
 
-// Գտնում ենք բոլոր խաչմերուկները
 const hStreets = STREETS.filter(s => (s.x2 - s.x1) > (s.z2 - s.z1));
 const vStreets = STREETS.filter(s => (s.z2 - s.z1) > (s.x2 - s.x1));
 
@@ -436,67 +555,59 @@ hStreets.forEach(h => {
   vStreets.forEach(v => {
     const cx = (v.x1 + v.x2) / 2;
     const cz = (h.z1 + h.z2) / 2;
-    intersections.push({ x: cx, z: cz });
+    intersections.push({
+      x: cx,
+      z: cz,
+      hw: (v.x2 - v.x1) / 2,
+      hh: (h.z2 - h.z1) / 2
+    });
   });
 });
 
-// Ամեն խաչմերուկում 4 zebra stripe
+// Ամեն խաչմերուկում zebra-ներ 4 ուղղությամբ
 intersections.forEach(inter => {
-  const stripeCount = 5;
-  const stripeW = 0.6;
-  const stripeGap = 0.5;
-  const roadHalfW = 4;
+  const stripeCount = 4;
+  const stripeW = 0.7;
+  const stripeGap = 0.6;
 
-  // Հորիզոնական zebra (հյուսիսից հարավ անցնելու համար)
   for (let i = 0; i < stripeCount; i++) {
     const offset = (i - (stripeCount - 1) / 2) * (stripeW + stripeGap);
 
-    // Վերին zebra
+    // Հյուսիս
     const z1 = new THREE.Mesh(
-      new THREE.BoxGeometry(roadHalfW * 2, 0.07, stripeW),
+      new THREE.BoxGeometry(stripeW, 0.07, inter.hh * 0.8),
       crosswalkMat
     );
-    z1.position.set(inter.x, 0.07, inter.z - roadHalfW - 1.5 + offset * 0);
-    // Ավելի պարզ՝ zebra-ները ուղղահայաց են ճանապարհին
+    z1.position.set(inter.x + offset, 0.07, inter.z - inter.hh - 1.5);
+    scene.add(z1);
+
+    // Հարավ
+    const z2 = new THREE.Mesh(
+      new THREE.BoxGeometry(stripeW, 0.07, inter.hh * 0.8),
+      crosswalkMat
+    );
+    z2.position.set(inter.x + offset, 0.07, inter.z + inter.hh + 1.5);
+    scene.add(z2);
+
+    // Արևմուտք
+    const z3 = new THREE.Mesh(
+      new THREE.BoxGeometry(inter.hw * 0.8, 0.07, stripeW),
+      crosswalkMat
+    );
+    z3.position.set(inter.x - inter.hw - 1.5, 0.07, inter.z + offset);
+    scene.add(z3);
+
+    // Արևելք
+    const z4 = new THREE.Mesh(
+      new THREE.BoxGeometry(inter.hw * 0.8, 0.07, stripeW),
+      crosswalkMat
+    );
+    z4.position.set(inter.x + inter.hw + 1.5, 0.07, inter.z + offset);
+    scene.add(z4);
   }
-
-  // Ավելի պարզ մոտեցում՝ 4 ուղղությամբ zebra-ներ
-  const zebraPositions = [
-    { dx: 0, dz: -roadHalfW - 1.5, rot: 0 },
-    { dx: 0, dz:  roadHalfW + 1.5, rot: 0 },
-    { dx: -roadHalfW - 1.5, dz: 0, rot: Math.PI / 2 },
-    { dx:  roadHalfW + 1.5, dz: 0, rot: Math.PI / 2 },
-  ];
-
-  zebraPositions.forEach(zp => {
-    for (let i = 0; i < stripeCount; i++) {
-      const offset = (i - (stripeCount - 1) / 2) * (stripeW + stripeGap);
-      const stripe = new THREE.Mesh(
-        new THREE.BoxGeometry(stripeW, 0.07, roadHalfW * 1.6),
-        crosswalkMat
-      );
-
-      if (zp.rot === 0) {
-        stripe.position.set(
-          inter.x + offset,
-          0.07,
-          inter.z + zp.dz
-        );
-      } else {
-        stripe.rotation.y = Math.PI / 2;
-        stripe.position.set(
-          inter.x + zp.dx,
-          0.07,
-          inter.z + offset
-        );
-      }
-      scene.add(stripe);
-    }
-  });
 });
 
 // ========== STREET LIGHTS ==========
-// Փողոցային լապտերներ խաչմերուկներում
 const poleMat = new THREE.MeshStandardMaterial({
   color: 0x2a2a2a,
   roughness: 0.7,
@@ -509,18 +620,22 @@ const lampMat = new THREE.MeshStandardMaterial({
 });
 
 intersections.forEach(inter => {
-  // 2 լապտեր ամեն խաչմերուկում (անկյուններում)
   const corners = [
-    { dx: -5, dz: -5 },
-    { dx: 5, dz: 5 }
+    { dx: -1, dz: -1 },
+    { dx: 1, dz: -1 },
+    { dx: -1, dz: 1 },
+    { dx: 1, dz: 1 }
   ];
 
   corners.forEach(c => {
+    const px = inter.x + c.dx * (inter.hw + 1.2);
+    const pz = inter.z + c.dz * (inter.hh + 1.2);
+
     const pole = new THREE.Mesh(
       new THREE.CylinderGeometry(0.12, 0.15, 6, 8),
       poleMat
     );
-    pole.position.set(inter.x + c.dx, 3, inter.z + c.dz);
+    pole.position.set(px, 3, pz);
     pole.castShadow = true;
     scene.add(pole);
 
@@ -528,10 +643,12 @@ intersections.forEach(inter => {
       new THREE.SphereGeometry(0.4, 12, 12),
       lampMat
     );
-    lamp.position.set(inter.x + c.dx, 6.2, inter.z + c.dz);
+    lamp.position.set(px, 6.2, pz);
     scene.add(lamp);
   });
 });
+
+// === ՄԱՍ 4-ը կցվում է այստեղ ===
 
 // === ՄԱՍ 4-ը կցվում է այստեղ ===
 
@@ -547,6 +664,11 @@ intersections.forEach(inter => {
 
 // ========== BUILDING COLORS ==========
 // Երևանի շենքերի գույներ — բեժ, կրեմ, դարչնագույն, մոխրագույն
+/* ============================================================
+   ՄԱՍ 4 — BUILDINGS + LANDMARKS (ՃՇՏՏՎԱԾ)
+   ============================================================ */
+
+// ========== BUILDING COLORS ==========
 const buildingColors = [
   0xd4a373, 0xccd5ae, 0xe9edc9, 0xfaedcd,
   0xb08968, 0xa68a6d, 0xc9ada7, 0xe8d5b7,
@@ -669,56 +791,76 @@ function addBuilding(x, z, w, d, h) {
 }
 
 // ========== GENERATE BUILDINGS IN BLOCKS ==========
-// Բլոկների կենտրոնները՝ փողոցների ցանցի միջև
+// ⚠️ ԿԱՐԵՎՈՐ՝ ՓՈՓՈԽՎԱԾ ՏՐԱՄԱԲԱՆՈՒԹՅՈՒՆ
+//
+// Փողոցների ցանցի կոորդինատները (նույնը ինչ Մաս 3-ում).
+// Ամեն զույգ (xs[i], xs[i+1]) փողոցի 2 եզրերն են։
+// Ամեն զույգ (xs[i+1], xs[i+2]) բլոկի 2 եզրերն են (շենքերի տեղը)։
+
 const xs = [-100, -76, -68, -40, -32, -4, 4, 32, 40, 68, 76, 100];
 const zs = [-100, -76, -68, -40, -32, -4, 4, 32, 40, 68, 76, 100];
 
-// Ամեն բլոկի մեջ դնում ենք 1 կամ 2 շենք
-// ⚠️ ԿԱՐԵՎՈՐ՝ i < xs.length - 2 (ոչ -1), որպեսզի i+2 չանցնի սահմանը
+// Բլոկները գտնվում են փողոցների ՄԻՋԵՎ։
+// Ամեն բլոկ ունի 4 եզրեր՝
+//   - ձախ փողոցի աջ եզր (xs[i+1])
+//   - աջ փողոցի ձախ եզր (xs[i+2])
+// Նույնը z-ի համար։
+
 for (let i = 0; i < xs.length - 2; i += 2) {
   for (let j = 0; j < zs.length - 2; j += 2) {
-    const bx1 = xs[i + 1];
-    const bx2 = xs[i + 2];
-    const bz1 = zs[j + 1];
-    const bz2 = zs[j + 2];
+    // Բլոկի սահմանները
+    const blockMinX = xs[i + 1];  // ձախ փողոցի աջ եզր
+    const blockMaxX = xs[i + 2];  // աջ փողոցի ձախ եզր
+    const blockMinZ = zs[j + 1];
+    const blockMaxZ = zs[j + 2];
 
     // Անվտանգության ստուգում
-    if (bx1 === undefined || bx2 === undefined) continue;
-    if (bz1 === undefined || bz2 === undefined) continue;
+    if (blockMinX === undefined || blockMaxX === undefined) continue;
+    if (blockMinZ === undefined || blockMaxZ === undefined) continue;
 
-    const blockW = bx2 - bx1;
-    const blockD = bz2 - bz1;
+    const blockW = blockMaxX - blockMinX;
+    const blockD = blockMaxZ - blockMinZ;
 
-    // Ստուգում ենք որ արժեքները վավեր են
     if (!isFinite(blockW) || !isFinite(blockD)) continue;
     if (blockW < 6 || blockD < 6) continue;
 
-    const cx = (bx1 + bx2) / 2;
-    const cz = (bz1 + bz2) / 2;
+    // Բլոկի կենտրոնը
+    const cx = (blockMinX + blockMaxX) / 2;
+    const cz = (blockMinZ + blockMaxZ) / 2;
+
+    // ⚠️ ԿԱՐԵՎՈՐ՝ Շենքերը պետք է լինեն բլոկի ՆԵՐՍՈՒՄ
+    // Մայթերից հետո մի փոքր տարածություն ենք թողնում
+    const margin = 1.5;
+    const usableW = blockW - margin * 2;
+    const usableD = blockD - margin * 2;
+
+    if (usableW < 4 || usableD < 4) continue;
 
     // 70% հավանականությամբ 1 մեծ շենք, 30%՝ 2 փոքր
     if (Math.random() < 0.7) {
-      const bw = blockW * 0.75;
-      const bd = blockD * 0.75;
+      const bw = usableW * 0.9;
+      const bd = usableD * 0.9;
       const h = 8 + Math.random() * 14;
       addBuilding(cx, cz, bw, bd, h);
     } else {
-      // 2 շենք կողք-կողքի
-      const bw = blockW * 0.4;
-      const bd = blockD * 0.75;
+      // 2 շենք կողք-կողքի (X առանցքով)
+      const bw = usableW * 0.42;
+      const bd = usableD * 0.9;
       const h1 = 6 + Math.random() * 10;
       const h2 = 6 + Math.random() * 10;
-      addBuilding(cx - blockW * 0.22, cz, bw, bd, h1);
-      addBuilding(cx + blockW * 0.22, cz, bw, bd, h2);
+      const offset = usableW * 0.25;
+      addBuilding(cx - offset, cz, bw, bd, h1);
+      addBuilding(cx + offset, cz, bw, bd, h2);
     }
   }
 }
 
 // ========== LANDMARK: CASCADE ==========
 // Կասկադի նման սանդղավոր կառույց
+// ⚠️ ՏԵՂԱՓՈԽՎԱԾ Է, որ չհայտնվի փողոցի վրա
 (function addCascade() {
   const baseX = 0;
-  const baseZ = 0;
+  const baseZ = -50;  // ⚠️ Տեղափոխված -50-ի վրա (բլոկի մեջ)
   const steps = 6;
   const stepMat = new THREE.MeshStandardMaterial({
     color: 0xf5e6d3,
@@ -767,6 +909,7 @@ for (let i = 0; i < xs.length - 2; i += 2) {
 
 // ========== LANDMARK: OPERA HOUSE ==========
 // Օպերայի նման կլոր կառույց
+// ⚠️ ՏԵՂԱՓՈԽՎԱԾ Է բլոկի կենտրոն
 (function addOpera() {
   const x = -50;
   const z = 50;
@@ -798,6 +941,7 @@ for (let i = 0; i < xs.length - 2; i += 2) {
 
 // ========== LANDMARK: MATENADARAN ==========
 // Մատենադարանի նման ուղղանկյուն կառույց
+// ⚠️ ՏԵՂԱՓՈԽՎԱԾ Է բլոկի կենտրոն
 (function addMatenadaran() {
   const x = 50;
   const z = -50;
@@ -826,11 +970,7 @@ for (let i = 0; i < xs.length - 2; i += 2) {
   // Կոլիզիա
   buildings.push({
     x, z, w: 18, d: 14, h: 8,
-    minX: x - 9, maxX: x + 9,
-    minZ: z - 7, maxZ: z + 7
-  });
-})();
-
+    minX
 // === ՄԱՍ 5-ը կցվում է այստեղ ===
 
 // === ՄԱՍ 5-ը կցվում է այստեղ ===
