@@ -179,18 +179,20 @@
 </script>
 
 <script type="module">
-// === ՄԱՍ 2-ը կցվում է այստեղ ===
- /* ============================================================
-   ՄԱՍ 2 — THREE.JS SETUP + LIGHTS + GROUND
-   ============================================================ */
+
+import * as THREE from 'three';
+
+// === ՄԱՍ 2 — THREE.JS SETUP + LIGHTS + GROUND ===
 
 // ========== RENDERER ==========
 const canvas = document.getElementById('game');
+
 const renderer = new THREE.WebGLRenderer({
   canvas,
   antialias: true,
   powerPreference: 'high-performance'
 });
+
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
