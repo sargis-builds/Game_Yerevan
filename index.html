@@ -1361,3 +1361,634 @@ function updateSpeedDisplay() {
 }
 
 // === ՄԱՍ 7-ը կցվում է այստեղ ===
+
+ /* ============================================================
+   ՄԱՍ 7 — DELIVERY MISSION SYSTEM
+   ============================================================ */
+
+// ========== MISSION STATE ==========
+const mission = {
+  phase: 'pickup',        // 'pickup' | 'deliver'
+  pickupPoint: null,      // { x, z }
+  deliverPoint: null,     // { x, z }
+  pickupMarker: null,     // Three.js mesh
+  deliverMarker: null,    // Three.js mesh
+  pickupRadius: 3.5,
+  deliverRadius: 3.5
+};
+
+// ========== GAME STATE ==========
+const gameState = {
+  score: 0,
+  delivered: 0,
+  startTime: Date.now(),
+  running: false
+};
+
+// ========== MARKER FACTORY ==========
+// Ցուցիչ ստեղծող ֆունկցիա — վերցնում/հանձնելու կետ
+function createMarker(color, icon) {
+  const group = new THREE.Group();
+
+  // Հիմքի շրջան
+  const ringGeo = new THREE.RingGeometry(2.5, 3.2, 32);
+  const ringMat = new THREE.MeshBasicMaterial({
+    color,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.8
+  });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.15;
+  group.add(ring);
+
+  // Ներքին շրջան (թափանցիկ)
+  const discGeo = new THREE.CircleGeometry(2.5, 32);
+  const discMat = new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity: 0.25,
+    side: THREE.DoubleSide
+  });
+  const disc = new THREE.Mesh(discGeo, discMat);
+  disc.rotation.x = -Math.PI / 2;
+  disc.position.y = 0.12;
+  group.add(disc);
+
+  // Ուղղահայաց սյուն (լույսի ճառագայթ)
+  const beamGeo = new THREE.CylinderGeometry(0.4, 0.4, 12, 12, 1, true);
+  const beamMat = new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity: 0.35,
+    side: THREE.DoubleSide
+  });
+  const beam = new THREE.Mesh(beamGeo, beamMat);
+  beam.position.y = 6;
+  group.add(beam);
+
+  // Իկոն (փոքրիկ գնդիկ վերևում)
+  const iconGeo = new THREE.SphereGeometry(0.7, 16, 16);
+  const iconMat = new THREE.MeshStandardMaterial({
+    color,
+    emissive: color,
+    emissiveIntensity: 0.6
+  });
+  const iconMesh = new THREE.Mesh(iconGeo, iconMat);
+  iconMesh.position.y = 3;
+  group.add(iconMesh);
+
+  group.userData.ring = ring;
+  group.userData.beam = beam;
+  group.userData.icon = iconMesh;
+
+  return group;
+}
+
+// ========== RANDOM POSITION IN STREETS ==========
+// Պատահական դիրք փողոցների վրա (շենքերից դուրս)
+function getRandomStreetPosition() {
+  const attempts = 50;
+
+  for (let i = 0; i < attempts; i++) {
+    // Ընտրում ենք պատահական փողոց
+    const street = STREETS[Math.floor(Math.random() * STREETS.length)];
+    const isHorizontal = (street.x2 - street.x1) > (street.z2 - street.z1);
+
+    let x, z;
+    if (isHorizontal) {
+      x = street.x1 + Math.random() * (street.x2 - street.x1);
+      z = (street.z1 + street.z2) / 2;
+    } else {
+      x = (street.x1 + street.x2) / 2;
+      z = street.z1 + Math.random() * (street.z2 - street.z1);
+    }
+
+    // Ստուգում ենք, որ խաղացողից հեռու լինի
+    const dx = x - player.position.x;
+    const dz = z - player.position.z;
+    const distSq = dx * dx + dz * dz;
+
+    if (distSq < 400) continue; // 20մ-ից ավելի հեռու
+
+    // Ստուգում ենք, որ շենք չլինի
+    if (checkCollision(x, z)) continue;
+
+    return { x, z };
+  }
+
+  // Fallback — վերադարձնում ենք կենտրոնական փողոցի կետ
+  return { x: 0, z: 20 };
+}
+
+// ========== START NEW MISSION ==========
+function startNewMission() {
+  // Մաքրում ենք հին ցուցիչները
+  if (mission.pickupMarker) {
+    scene.remove(mission.pickupMarker);
+    mission.pickupMarker = null;
+  }
+  if (mission.deliverMarker) {
+    scene.remove(mission.deliverMarker);
+    mission.deliverMarker = null;
+  }
+
+  // Նոր կետեր
+  mission.pickupPoint = getRandomStreetPosition();
+  mission.deliverPoint = getRandomStreetPosition();
+
+  // Ստեղծում ենք ցուցիչները
+  mission.pickupMarker = createMarker(0x4facfe, 'pickup');
+  mission.pickupMarker.position.set(
+    mission.pickupPoint.x,
+    0,
+    mission.pickupPoint.z
+  );
+  scene.add(mission.pickupMarker);
+
+  mission.deliverMarker = createMarker(0xf5576c, 'deliver');
+  mission.deliverMarker.position.set(
+    mission.deliverPoint.x,
+    0,
+    mission.deliverPoint.z
+  );
+  // Սկզբում թաքցնում ենք deliver-ը
+  mission.deliverMarker.visible = false;
+  scene.add(mission.deliverMarker);
+
+  // Փուլը՝ pickup
+  mission.phase = 'pickup';
+  updateMissionUI();
+}
+
+// ========== MISSION UI ==========
+const missionEl = document.getElementById('mission');
+
+function updateMissionUI() {
+  if (mission.phase === 'pickup') {
+    missionEl.textContent = '📍 Գնա՛ պատվերի կետ';
+    missionEl.classList.remove('deliver');
+  } else {
+    missionEl.textContent = '📦 Հասցրու՛ հաճախորդին';
+    missionEl.classList.add('deliver');
+  }
+}
+
+// ========== CHECK MISSION PROGRESS ==========
+function checkMissionProgress() {
+  if (mission.phase === 'pickup' && mission.pickupPoint) {
+    const dx = player.position.x - mission.pickupPoint.x;
+    const dz = player.position.z - mission.pickupPoint.z;
+    const distSq = dx * dx + dz * dz;
+
+    if (distSq < mission.pickupRadius * mission.pickupRadius) {
+      // Վերցրինք պատվերը
+      mission.phase = 'deliver';
+      mission.pickupMarker.visible = false;
+      mission.deliverMarker.visible = true;
+      updateMissionUI();
+      showToast('📦 Պատվերը վերցվեց!');
+    }
+  } else if (mission.phase === 'deliver' && mission.deliverPoint) {
+    const dx = player.position.x - mission.deliverPoint.x;
+    const dz = player.position.z - mission.deliverPoint.z;
+    const distSq = dx * dx + dz * dz;
+
+    if (distSq < mission.deliverRadius * mission.deliverRadius) {
+      // Առաքվեց
+      completeDelivery();
+    }
+  }
+}
+
+// ========== COMPLETE DELIVERY ==========
+function completeDelivery() {
+  gameState.score += 10;
+  gameState.delivered += 1;
+
+  document.getElementById('score').textContent = gameState.score;
+  document.getElementById('delivered').textContent = gameState.delivered;
+
+  showToast('+10 💰 Առաքվա՛ծ');
+
+  // Նոր առաքելություն
+  setTimeout(() => {
+    startNewMission();
+  }, 800);
+}
+
+// ========== TOAST ==========
+const toastEl = document.getElementById('toast');
+let toastTimer = null;
+
+function showToast(text) {
+  toastEl.textContent = text;
+  toastEl.classList.add('show');
+
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toastEl.classList.remove('show');
+  }, 1200);
+}
+
+// ========== MARKER ANIMATION ==========
+function animateMarkers(time) {
+  const markers = [mission.pickupMarker, mission.deliverMarker];
+  markers.forEach(m => {
+    if (!m || !m.visible) return;
+
+    // Պտտվող օղակ
+    if (m.userData.ring) {
+      m.userData.ring.rotation.z = time * 0.001;
+    }
+
+    // Վերև-ներքև շարժվող իկոն
+    if (m.userData.icon) {
+      m.userData.icon.position.y = 3 + Math.sin(time * 0.003) * 0.5;
+    }
+
+    // Թափանցիկության փոփոխություն
+    if (m.userData.beam) {
+      m.userData.beam.material.opacity = 0.25 + Math.sin(time * 0.002) * 0.15;
+    }
+  });
+}
+
+// ========== TIMER UPDATE ==========
+const timerEl = document.getElementById('timer');
+
+function updateTimer() {
+  const elapsed = Math.floor((Date.now() - gameState.startTime) / 1000);
+  const minutes = Math.floor(elapsed / 60);
+  const seconds = elapsed % 60;
+  timerEl.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
+// === ՄԱՍ 8-ը կցվում է այստեղ ===
+
+ /* ============================================================
+   ՄԱՍ 8 — MINIMAP + HUD UPDATE
+   ============================================================ */
+
+// ========== MINIMAP SETUP ==========
+const minimapCanvas = document.getElementById('minimapCanvas');
+const minimapCtx = minimapCanvas.getContext('2d');
+
+const MINIMAP_SIZE = 200;
+const MINIMAP_RADIUS = MINIMAP_SIZE / 2;
+const MINIMAP_SCALE = 0.9; // 1 աշխարհի միավոր = 0.9 պիքսել
+
+// ========== DRAW MINIMAP ==========
+function drawMinimap() {
+  const ctx = minimapCtx;
+  const cx = MINIMAP_RADIUS;
+  const cy = MINIMAP_RADIUS;
+
+  // --- Clear ---
+  ctx.clearRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE);
+
+  // --- Background circle ---
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, MINIMAP_RADIUS - 2, 0, Math.PI * 2);
+  ctx.clip();
+
+  // Ֆոն
+  ctx.fillStyle = '#2a3a2a';
+  ctx.fillRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE);
+
+  // --- Camera follows player ---
+  const px = player.position.x;
+  const pz = player.position.z;
+
+  // World → Minimap coordinate helper
+  function worldToMap(wx, wz) {
+    return {
+      x: cx + (wx - px) * MINIMAP_SCALE,
+      y: cy + (wz - pz) * MINIMAP_SCALE
+    };
+  }
+
+  // --- Draw streets ---
+  ctx.strokeStyle = '#555555';
+  ctx.lineWidth = 6;
+
+  STREETS.forEach(s => {
+    const p1 = worldToMap(s.x1, s.z1);
+    const p2 = worldToMap(s.x2, s.z2);
+
+    ctx.beginPath();
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.stroke();
+  });
+
+  // --- Draw buildings ---
+  ctx.fillStyle = '#8a7a5a';
+  buildings.forEach(b => {
+    const p1 = worldToMap(b.minX, b.minZ);
+    const p2 = worldToMap(b.maxX, b.maxZ);
+
+    const w = p2.x - p1.x;
+    const h = p2.y - p1.y;
+
+    ctx.fillRect(p1.x, p1.y, w, h);
+  });
+
+  // --- Draw mission markers ---
+  if (mission.phase === 'pickup' && mission.pickupPoint) {
+    const p = worldToMap(mission.pickupPoint.x, mission.pickupPoint.z);
+    drawMarkerDot(ctx, p.x, p.y, '#4facfe', 6);
+  }
+
+  if (mission.phase === 'deliver' && mission.deliverPoint) {
+    const p = worldToMap(mission.deliverPoint.x, mission.deliverPoint.z);
+    drawMarkerDot(ctx, p.x, p.y, '#f5576c', 6);
+  }
+
+  // --- Draw player (always at center) ---
+  // Սլաք, որը ցույց է տալիս ուղղությունը
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(-playerState.heading);
+
+  ctx.fillStyle = '#ffd166';
+  ctx.beginPath();
+  ctx.moveTo(0, -8);
+  ctx.lineTo(-6, 6);
+  ctx.lineTo(0, 3);
+  ctx.lineTo(6, 6);
+  ctx.closePath();
+  ctx.fill();
+
+  // Սահման
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  ctx.restore();
+
+  ctx.restore();
+
+  // --- Border ring ---
+  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(cx, cy, MINIMAP_RADIUS - 3, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // --- North indicator ---
+  ctx.fillStyle = '#ffd166';
+  ctx.font = 'bold 12px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('N', cx, 14);
+}
+
+// ========== MARKER DOT HELPER ==========
+function drawMarkerDot(ctx, x, y, color, radius) {
+  // Արտաքին շող
+  ctx.beginPath();
+  ctx.arc(x, y, radius + 3, 0, Math.PI * 2);
+  ctx.fillStyle = color + '44';
+  ctx.fill();
+
+  // Հիմնական կետ
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+
+  // Սահման
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
+
+// ========== HUD UPDATE ==========
+function updateHUD() {
+  updateSpeedDisplay();
+  updateTimer();
+}
+
+// ========== DIRECTION ARROW TO TARGET ==========
+// Սլաք էկրանի վրա, որը ցույց է տալիս դեպի թիրախը
+// (կցուցադրվի HUD-ի վրա, ոչ 3D-ում)
+
+// Ստեղծում ենք DOM element
+const arrowEl = document.createElement('div');
+arrowEl.style.cssText = `
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 48px;
+  color: #ffd166;
+  text-shadow: 0 0 20px rgba(255,209,102,0.8);
+  pointer-events: none;
+  z-index: 9;
+  opacity: 0;
+  transition: opacity 0.3s;
+  font-weight: 900;
+`;
+arrowEl.textContent = '⬆';
+document.body.appendChild(arrowEl);
+
+// ========== UPDATE DIRECTION ARROW ==========
+function updateDirectionArrow() {
+  let target = null;
+
+  if (mission.phase === 'pickup' && mission.pickupPoint) {
+    target = mission.pickupPoint;
+  } else if (mission.phase === 'deliver' && mission.deliverPoint) {
+    target = mission.deliverPoint;
+  }
+
+  if (!target) {
+    arrowEl.style.opacity = '0';
+    return;
+  }
+
+  // Հաշվում ենք ուղղությունը
+  const dx = target.x - player.position.x;
+  const dz = target.z - player.position.z;
+  const dist = Math.sqrt(dx * dx + dz * dz);
+
+  // Եթե շատ մոտ ենք, թաքցնում ենք
+  if (dist < 6) {
+    arrowEl.style.opacity = '0';
+    return;
+  }
+
+  // Հաշվում ենք անկյունը էկրանի կոորդինատներում
+  // Խաղի աշխարհում +Z-ը ներքև է, +X-ը աջ
+  // Խաղացողի heading-ը 0 է, երբ նայում է +Z-ին
+  const angleToTarget = Math.atan2(dx, dz);
+  const relativeAngle = angleToTarget - playerState.heading;
+
+  // Էկրանի անկյունը (0 = վերև)
+  const screenAngle = -relativeAngle;
+
+  // Դիրքավորում ենք սլաքը էկրանի կենտրոնից 120px հեռավորության վրա
+  const radius = 120;
+  const ax = Math.sin(screenAngle) * radius;
+  const ay = -Math.cos(screenAngle) * radius;
+
+  arrowEl.style.transform = `translate(calc(-50% + ${ax}px), calc(-50% + ${ay}px)) rotate(${screenAngle}rad)`;
+  arrowEl.style.opacity = '0.85';
+}
+
+// ========== DISTANCE TO TARGET (optional display) ==========
+// Կարող ենք ցուցադրել հեռավորությունը mission-ի տեքստում
+function updateMissionDistance() {
+  let target = null;
+  if (mission.phase === 'pickup' && mission.pickupPoint) {
+    target = mission.pickupPoint;
+  } else if (mission.phase === 'deliver' && mission.deliverPoint) {
+    target = mission.deliverPoint;
+  }
+
+  if (!target) return;
+
+  const dx = target.x - player.position.x;
+  const dz = target.z - player.position.z;
+  const dist = Math.round(Math.sqrt(dx * dx + dz * dz));
+
+  // Ավելացնում ենք հեռավորությունը mission-ի տեքստին
+  const baseText = mission.phase === 'pickup'
+    ? '📍 Գնա՛ պատվերի կետ'
+    : '📦 Հասցրու՛ հաճախորդին';
+
+  missionEl.textContent = `${baseText} — ${dist}մ`;
+}
+
+// === ՄԱՍ 9-ը կցվում է այստեղ ===
+
+ /* ============================================================
+   ՄԱՍ 9 — GAME LOOP + FINAL WIRING
+   ============================================================ */
+
+// ========== CLOCK ==========
+const clock = new THREE.Clock();
+
+// ========== GAME LOOP ==========
+let animationId = null;
+
+function gameLoop() {
+  animationId = requestAnimationFrame(gameLoop);
+
+  // Delta time (վայրկյաններով)
+  const dt = Math.min(clock.getDelta(), 0.05); // cap 50ms
+  const time = performance.now();
+
+  // --- Updates ---
+  if (gameState.running) {
+    updatePhysics(dt);
+    checkMissionProgress();
+  }
+
+  updateCamera(dt);
+  animateMarkers(time);
+  updateHUD();
+  updateDirectionArrow();
+  updateMissionDistance();
+
+  // --- Render ---
+  renderer.render(scene, camera);
+
+  // --- Minimap (ավելի դանդաղ՝ 30fps) ---
+  if (Math.floor(time / 33) !== Math.floor((time - dt * 1000) / 33)) {
+    drawMinimap();
+  }
+}
+
+// ========== START GAME ==========
+function startGame() {
+  // Թաքցնում ենք start screen-ը
+  const startScreen = document.getElementById('startScreen');
+  startScreen.classList.add('hide');
+
+  // Վերականգնում ենք state-ը
+  gameState.running = true;
+  gameState.startTime = Date.now();
+  gameState.score = 0;
+  gameState.delivered = 0;
+
+  // Խաղացողի սկզբնական դիրք
+  player.position.set(0, 0, 20);
+  playerState.speed = 0;
+  playerState.heading = 0;
+
+  // HUD-ի reset
+  document.getElementById('score').textContent = '0';
+  document.getElementById('delivered').textContent = '0';
+  document.getElementById('timer').textContent = '0:00';
+
+  // Առաջին առաքելությունը
+  startNewMission();
+
+  // Ցուցադրում ենք ողջույնի հաղորդագրություն
+  showToast('🛵 Բարի գալուստ Երևան');
+
+  // Սկսում ենք loop-ը
+  if (!animationId) {
+    clock.start();
+    gameLoop();
+  }
+}
+
+// ========== START BUTTON ==========
+const startBtn = document.getElementById('startBtn');
+startBtn.addEventListener('click', startGame);
+
+// Նաև Enter-ով սկսել
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Enter' && !gameState.running) {
+    startGame();
+  }
+});
+
+// ========== INITIAL RENDER (before start) ==========
+// Ցուցադրում ենք խաղի աշխարհը start screen-ի հետևում
+camera.position.copy(CAM_OFFSET);
+camera.lookAt(0, 0, 0);
+renderer.render(scene, camera);
+
+// Սկսում ենք loop-ը անմիջապես, բայց physics-ը չի աշխատի
+// մինչև startGame-ը չկանչվի
+clock.start();
+gameLoop();
+
+// ========== FPS COUNTER (optional, dev) ==========
+let fpsFrames = 0;
+let fpsLastTime = performance.now();
+let fpsValue = 60;
+
+function updateFPS() {
+  fpsFrames++;
+  const now = performance.now();
+  if (now - fpsLastTime >= 1000) {
+    fpsValue = fpsFrames;
+    fpsFrames = 0;
+    fpsLastTime = now;
+  }
+}
+
+// ========== CLEANUP ON PAGE UNLOAD ==========
+window.addEventListener('beforeunload', () => {
+  if (animationId) {
+    cancelAnimationFrame(animationId);
+  }
+});
+
+// ========== WELCOME LOG ==========
+console.log('%c🛵 Երևանյան Առաքիչ', 'font-size: 24px; font-weight: 900; color: #ff6b35;');
+console.log('%cPrototype v0.1 — 2.5D Isometric', 'font-size: 14px; color: #ffd166;');
+console.log('%cՕգտագործիր WASD կամ սլաքները քշելու համար', 'font-size: 12px; color: #888;');
+
+/* ============================================================
+   ՎԵՐՋ 🎉
+   ============================================================ */
+</script>
+</body>
+</html>
