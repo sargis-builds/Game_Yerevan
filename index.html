@@ -652,6 +652,10 @@ intersections.forEach(inter => {
    ՄԱՍ 4 — BUILDINGS + LANDMARKS (ՃՇՏՏՎԱԾ)
    ============================================================ */
 
+/* ============================================================
+   ՄԱՍ 4 — BUILDINGS + LANDMARKS (ՀԱՄԱՊԱՏԱՍԽԱՆ ՄԱՍ 3-ԻՆ)
+   ============================================================ */
+
 // ========== BUILDING COLORS ==========
 const buildingColors = [
   0xd4a373, 0xccd5ae, 0xe9edc9, 0xfaedcd,
@@ -661,33 +665,23 @@ const buildingColors = [
 
 const roofColors = [0x8b5a3c, 0x6b4423, 0x7a5c3f, 0x5c4033];
 
-// Կոլիզիայի տվյալներ — ամեն շենք կունենա AABB box
+// Կոլիզիայի տվյալներ
 const buildings = [];
 
 // ========== BUILDING FACTORY ==========
 function addBuilding(x, z, w, d, h) {
-  // Անվտանգության ստուգում
   if (!isFinite(x) || !isFinite(z) || !isFinite(w) || !isFinite(d) || !isFinite(h)) {
-    console.warn('addBuilding: invalid params', { x, z, w, d, h });
     return;
   }
-  if (w <= 0 || d <= 0 || h <= 0) {
-    console.warn('addBuilding: non-positive size', { x, z, w, d, h });
-    return;
-  }
+  if (w <= 0 || d <= 0 || h <= 0) return;
 
   const color = buildingColors[Math.floor(Math.random() * buildingColors.length)];
   const roofColor = roofColors[Math.floor(Math.random() * roofColors.length)];
 
   // --- Main body ---
-  const bodyMat = new THREE.MeshStandardMaterial({
-    color,
-    roughness: 0.9,
-    metalness: 0
-  });
   const body = new THREE.Mesh(
     new THREE.BoxGeometry(w, h, d),
-    bodyMat
+    new THREE.MeshStandardMaterial({ color, roughness: 0.9 })
   );
   body.position.set(x, h / 2, z);
   body.castShadow = true;
@@ -703,7 +697,7 @@ function addBuilding(x, z, w, d, h) {
   roof.castShadow = true;
   scene.add(roof);
 
-  // --- Windows on all 4 sides ---
+  // --- Windows ---
   const winMat = new THREE.MeshStandardMaterial({
     color: 0x88ccff,
     emissive: 0x224466,
@@ -720,7 +714,6 @@ function addBuilding(x, z, w, d, h) {
   const colsX = Math.max(0, Math.floor((w - 2) / winGapX));
   const colsZ = Math.max(0, Math.floor((d - 2) / winGapX));
 
-  // Front (+Z) and Back (-Z) windows
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < colsX; c++) {
       const wx = x - w / 2 + 1.5 + c * winGapX;
@@ -742,7 +735,6 @@ function addBuilding(x, z, w, d, h) {
     }
   }
 
-  // Left (-X) and Right (+X) windows
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < colsZ; c++) {
       const wz = z - d / 2 + 1.5 + c * winGapX;
@@ -764,7 +756,7 @@ function addBuilding(x, z, w, d, h) {
     }
   }
 
-  // --- Save collision data ---
+  // --- Collision data ---
   buildings.push({
     x, z, w, d, h,
     minX: x - w / 2,
@@ -775,50 +767,52 @@ function addBuilding(x, z, w, d, h) {
 }
 
 // ========== GENERATE BUILDINGS IN BLOCKS ==========
-// ⚠️ ԿԱՐԵՎՈՐ՝ ՓՈՓՈԽՎԱԾ ՏՐԱՄԱԲԱՆՈՒԹՅՈՒՆ
+// ⚠️ ԿԱՐԵՎՈՐ՝ Բլոկների կոորդինատները ՀԱՄԱՊԱՏԱՍԽԱՆ են Մաս 3-ի փողոցներին։
 //
-// Փողոցների ցանցի կոորդինատները (նույնը ինչ Մաս 3-ում).
-// Ամեն զույգ (xs[i], xs[i+1]) փողոցի 2 եզրերն են։
-// Ամեն զույգ (xs[i+1], xs[i+2]) բլոկի 2 եզրերն են (շենքերի տեղը)։
+// Մաս 3-ի փողոցների սահմանները՝
+//   X: -7..7 (avenue), -41..-31 (main), -75..-68 (small),
+//      31..41 (main), 68..75 (small)
+//   Z: նույնը
+//
+// Այստեղից բլոկները (փողոցների միջև)՝
+//   X: -100..-75, -68..-41, -31..-7, 7..31, 41..68, 75..100
+//   Z: նույնը
 
-const xs = [-100, -76, -68, -40, -32, -4, 4, 32, 40, 68, 76, 100];
-const zs = [-100, -76, -68, -40, -32, -4, 4, 32, 40, 68, 76, 100];
+const BLOCK_X = [
+  { min: -100, max: -75 },   // 25մ լայն
+  { min: -68,  max: -41 },   // 27մ լայն
+  { min: -31,  max: -7  },   // 24մ լայն
+  { min: 7,    max: 31  },   // 24մ լայն
+  { min: 41,   max: 68  },   // 27մ լայն
+  { min: 75,   max: 100 }    // 25մ լայն
+];
 
-// Բլոկները գտնվում են փողոցների ՄԻՋԵՎ։
-// Ամեն բլոկ ունի 4 եզրեր՝
-//   - ձախ փողոցի աջ եզր (xs[i+1])
-//   - աջ փողոցի ձախ եզր (xs[i+2])
-// Նույնը z-ի համար։
+const BLOCK_Z = [
+  { min: -100, max: -75 },
+  { min: -68,  max: -41 },
+  { min: -31,  max: -7  },
+  { min: 7,    max: 31  },
+  { min: 41,   max: 68  },
+  { min: 75,   max: 100 }
+];
 
-for (let i = 0; i < xs.length - 2; i += 2) {
-  for (let j = 0; j < zs.length - 2; j += 2) {
-    // Բլոկի սահմանները
-    const blockMinX = xs[i + 1];  // ձախ փողոցի աջ եզր
-    const blockMaxX = xs[i + 2];  // աջ փողոցի ձախ եզր
-    const blockMinZ = zs[j + 1];
-    const blockMaxZ = zs[j + 2];
+// Ամեն բլոկի մեջ դնում ենք 1 կամ 2 շենք
+BLOCK_X.forEach(bx => {
+  BLOCK_Z.forEach(bz => {
+    const blockW = bx.max - bx.min;
+    const blockD = bz.max - bz.min;
 
-    // Անվտանգության ստուգում
-    if (blockMinX === undefined || blockMaxX === undefined) continue;
-    if (blockMinZ === undefined || blockMaxZ === undefined) continue;
+    if (blockW < 6 || blockD < 6) return;
 
-    const blockW = blockMaxX - blockMinX;
-    const blockD = blockMaxZ - blockMinZ;
+    const cx = (bx.min + bx.max) / 2;
+    const cz = (bz.min + bz.max) / 2;
 
-    if (!isFinite(blockW) || !isFinite(blockD)) continue;
-    if (blockW < 6 || blockD < 6) continue;
-
-    // Բլոկի կենտրոնը
-    const cx = (blockMinX + blockMaxX) / 2;
-    const cz = (blockMinZ + blockMaxZ) / 2;
-
-    // ⚠️ ԿԱՐԵՎՈՐ՝ Շենքերը պետք է լինեն բլոկի ՆԵՐՍՈՒՄ
-    // Մայթերից հետո մի փոքր տարածություն ենք թողնում
-    const margin = 1.5;
+    // Մայթերից հետո տարածություն (margin)
+    const margin = 2;
     const usableW = blockW - margin * 2;
     const usableD = blockD - margin * 2;
 
-    if (usableW < 4 || usableD < 4) continue;
+    if (usableW < 4 || usableD < 4) return;
 
     // 70% հավանականությամբ 1 մեծ շենք, 30%՝ 2 փոքր
     if (Math.random() < 0.7) {
@@ -836,15 +830,14 @@ for (let i = 0; i < xs.length - 2; i += 2) {
       addBuilding(cx - offset, cz, bw, bd, h1);
       addBuilding(cx + offset, cz, bw, bd, h2);
     }
-  }
-}
+  });
+});
 
 // ========== LANDMARK: CASCADE ==========
-// Կասկադի նման սանդղավոր կառույց
-// ⚠️ ՏԵՂԱՓՈԽՎԱԾ Է, որ չհայտնվի փողոցի վրա
+// Կասկադ — կենտրոնական բլոկի մեջ (7..31, 7..31)
 (function addCascade() {
-  const baseX = 0;
-  const baseZ = -50;  // ⚠️ Տեղափոխված -50-ի վրա (բլոկի մեջ)
+  const baseX = 19;
+  const baseZ = 19;
   const steps = 6;
   const stepMat = new THREE.MeshStandardMaterial({
     color: 0xf5e6d3,
@@ -856,25 +849,24 @@ for (let i = 0; i < xs.length - 2; i += 2) {
   });
 
   for (let i = 0; i < steps; i++) {
-    const stepW = 24 - i * 2;
+    const stepW = 20 - i * 2;
     const stepH = 2.5;
-    const stepD = 4;
+    const stepD = 3;
 
     const step = new THREE.Mesh(
       new THREE.BoxGeometry(stepW, stepH, stepD),
       stepMat
     );
-    step.position.set(baseX, stepH / 2 + i * stepH, baseZ - 20 + i * stepD);
+    step.position.set(baseX, stepH / 2 + i * stepH, baseZ - 8 + i * stepD);
     step.castShadow = true;
     step.receiveShadow = true;
     scene.add(step);
 
-    // Կողային պատնեշներ
     const railL = new THREE.Mesh(
       new THREE.BoxGeometry(0.6, 1.2, stepD),
       railMat
     );
-    railL.position.set(baseX - stepW / 2 + 0.3, stepH + i * stepH + 0.6, baseZ - 20 + i * stepD);
+    railL.position.set(baseX - stepW / 2 + 0.3, stepH + i * stepH + 0.6, baseZ - 8 + i * stepD);
     railL.castShadow = true;
     scene.add(railL);
 
@@ -883,20 +875,18 @@ for (let i = 0; i < xs.length - 2; i += 2) {
     scene.add(railR);
   }
 
-  // Կասկադի կոլիզիա
   buildings.push({
-    x: baseX, z: baseZ - 12, w: 24, d: 20, h: 15,
-    minX: baseX - 12, maxX: baseX + 12,
-    minZ: baseZ - 22, maxZ: baseZ - 2
+    x: baseX, z: baseZ, w: 20, d: 20, h: 15,
+    minX: baseX - 10, maxX: baseX + 10,
+    minZ: baseZ - 10, maxZ: baseZ + 10
   });
 })();
 
 // ========== LANDMARK: OPERA HOUSE ==========
-// Օպերայի նման կլոր կառույց
-// ⚠️ ՏԵՂԱՓՈԽՎԱԾ Է բլոկի կենտրոն
+// Օպերա — ձախ-ներքև բլոկ (-68..-41, 41..68)
 (function addOpera() {
-  const x = -50;
-  const z = 50;
+  const x = -54;
+  const z = 54;
 
   const base = new THREE.Mesh(
     new THREE.CylinderGeometry(10, 10, 3, 24),
@@ -915,7 +905,6 @@ for (let i = 0; i < xs.length - 2; i += 2) {
   dome.castShadow = true;
   scene.add(dome);
 
-  // Կոլիզիա
   buildings.push({
     x, z, w: 20, d: 20, h: 13,
     minX: x - 10, maxX: x + 10,
@@ -924,11 +913,10 @@ for (let i = 0; i < xs.length - 2; i += 2) {
 })();
 
 // ========== LANDMARK: MATENADARAN ==========
-// Մատենադարանի նման ուղղանկյուն կառույց
-// ⚠️ ՏԵՂԱՓՈԽՎԱԾ Է բլոկի կենտրոն
+// Մատենադարան — աջ-վերև բլոկ (41..68, -68..-41)
 (function addMatenadaran() {
-  const x = 50;
-  const z = -50;
+  const x = 54;
+  const z = -54;
 
   const base = new THREE.Mesh(
     new THREE.BoxGeometry(18, 8, 14),
@@ -939,7 +927,6 @@ for (let i = 0; i < xs.length - 2; i += 2) {
   base.receiveShadow = true;
   scene.add(base);
 
-  // Սյուներ առջևում
   const colMat = new THREE.MeshStandardMaterial({ color: 0xf5e6d3, roughness: 0.7 });
   for (let i = 0; i < 6; i++) {
     const col = new THREE.Mesh(
@@ -951,15 +938,16 @@ for (let i = 0; i < xs.length - 2; i += 2) {
     scene.add(col);
   }
 
-  // Կոլիզիա
   buildings.push({
     x, z, w: 18, d: 14, h: 8,
-    minX
-// === ՄԱՍ 5-ը կցվում է այստեղ ===
+    minX: x - 9, maxX: x + 9,
+    minZ: z - 7, maxZ: z + 7
+  });
+})();
 
 // === ՄԱՍ 5-ը կցվում է այստեղ ===
 
- /* ============================================================
+/* ============================================================
    ՄԱՍ 5 — SAMAKAT MODEL + INDIAN COURIER
    ============================================================ */
 
