@@ -2,7 +2,11 @@
 <html lang="hy">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f0f1e">
 <title>Երևանյան Առաքիչ</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -65,14 +69,22 @@
   }
 
   #minimap {
-    bottom: 28px; left: 28px;
-    width: 200px; height: 200px;
-    border-radius: 50%;
-    background: rgba(0,0,0,0.65);
-    border: 3px solid rgba(255,255,255,0.15);
-    overflow: hidden;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  top: 16px; right: 16px;
+  width: 140px; height: 140px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.65);
+  border: 3px solid rgba(255,255,255,0.15);
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  z-index: 12;
+}
+
+@media (max-width: 600px) {
+  #minimap {
+    width: 110px; height: 110px;
+    top: 12px; right: 12px;
   }
+}
   #minimap canvas { width: 100%; height: 100%; display: block; }
 
   #controls {
@@ -163,6 +175,121 @@
   }
   #startBtn:hover { transform: scale(1.05); }
   #startBtn:active { transform: scale(0.98); }
+
+/* ============================================================
+   MOBILE JOYSTICK + TOUCH CAMERA
+   ============================================================ */
+
+/* ⚠️ Թաքցնում ենք ամեն ինչ, բացի խաղից */
+body {
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+#game {
+  touch-action: none;
+}
+
+/* Joystick — ձախ ներքև */
+#joystickZone {
+  position: fixed;
+  bottom: 30px;
+  left: 30px;
+  width: 140px;
+  height: 140px;
+  z-index: 15;
+  pointer-events: auto;
+  touch-action: none;
+  display: none;
+}
+
+#joystickBase {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.35);
+  border: 3px solid rgba(255, 255, 255, 0.25);
+  position: relative;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+#joystickKnob {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 60px; height: 60px;
+  margin-left: -30px;
+  margin-top: -30px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #ffd166, #ff6b35);
+  border: 3px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 4px 16px rgba(255, 107, 53, 0.6);
+  transition: transform 0.05s;
+  will-change: transform;
+}
+
+/* ⚠️ Touch area — ամբողջ էկրանը, բացի joystick-ից */
+#touchLookZone {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  pointer-events: auto;
+  touch-action: none;
+  display: none;
+  background: transparent;
+  /* ⚠️ ԱՅՍ ՏՈՂԵՐԸ ԱՎԵԼԱՑՐՈՒ */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Ցույց տալ mobile սարքերում */
+@media (hover: none) and (pointer: coarse) {
+  #joystickZone { display: block; }
+  #touchLookZone { display: block; }
+  #controls { display: none; }
+}
+
+/* Desktop-ի համար joystick-ը թաքցնում ենք */
+@media (hover: hover) and (pointer: fine) {
+  #joystickZone { display: none; }
+  #touchLookZone { display: none; }
+}
+
+/* Mobile-ում HUD-ը փոքրացնում ենք */
+@media (max-width: 600px) {
+  #topBar {
+    font-size: 12px;
+    padding: 8px 16px;
+    gap: 16px;
+  }
+  #topBar .value { font-size: 14px; }
+
+  #mission {
+    font-size: 13px;
+    padding: 10px 20px;
+    top: 64px;
+  }
+
+  #speedo {
+    bottom: 20px; right: 20px;
+    padding: 10px 16px;
+  }
+  #speedo .num { font-size: 24px; }
+  #speedo .unit { font-size: 9px; }
+
+  #directionArrow {
+    font-size: 36px;
+  }
+}
 </style>
 </head>
 <body>
@@ -202,6 +329,14 @@
 
 <div class="hud" id="toast">+10 💰</div>
 <div id="directionArrow">⬆</div>
+<!-- ⬇️ MOBILE CONTROLS ⬇️ -->
+<div id="joystickZone">
+  <div id="joystickBase">
+    <div id="joystickKnob"></div>
+  </div>
+</div>
+
+<div id="touchLookZone"></div>
 <div id="fpsCounter">FPS: 0</div>
 
 <script type="importmap">
@@ -218,6 +353,11 @@ import * as THREE from 'three';
 
 // ⚠️ DEBUG flag — FPS և console.log-երի համար
 const DEBUG = false;
+
+// ⚠️ Camera-ի լրացուցիչ պտույտ (touch look-ի համար)
+let cameraYawOffset = 0;
+
+let cameraPitchOffset = Math.PI / 85;   // 15° — սկզբնական
 
 // === ՄԱՍ 2-ը կցվում է այստեղից ===
 
@@ -1557,25 +1697,26 @@ const camDesiredLook = new THREE.Vector3();
 let camInitialized = false;
 
 function updateCamera(dt) {
-  const h = playerState.heading;
+  const h = playerState.heading + cameraYawOffset;
   const forwardX = Math.sin(h);
   const forwardZ = Math.cos(h);
 
-  // Տեսախցիկը կանգնում է մեքենայի ՀԵՏԵՎՈՒՄ
+  // ⚠️ Pitch — ուղղահայաց պտույտ
+  const heightOffset = Math.sin(cameraPitchOffset) * CAM_DISTANCE;
+  const distanceScale = Math.cos(cameraPitchOffset);
+
   camDesiredPos.set(
-    player.position.x - forwardX * CAM_DISTANCE,
-    player.position.y + CAM_HEIGHT,
-    player.position.z - forwardZ * CAM_DISTANCE
+    player.position.x - forwardX * CAM_DISTANCE * distanceScale,
+    player.position.y + CAM_HEIGHT + heightOffset,
+    player.position.z - forwardZ * CAM_DISTANCE * distanceScale
   );
 
-  // Նայում է մեքենայից ԱՌԱՋ
   camDesiredLook.set(
     player.position.x + forwardX * CAM_LOOK_AHEAD,
-    player.position.y + 1.5,
+    player.position.y + 0.0,
     player.position.z + forwardZ * CAM_LOOK_AHEAD
   );
 
-  // Սահուն lerp
   const posLerp = 1 - Math.exp(-CAM_SMOOTH_POS * dt);
   const lookLerp = 1 - Math.exp(-CAM_SMOOTH_LOOK * dt);
 
@@ -2479,6 +2620,111 @@ document.addEventListener('touchend', (e) => {
   lastTouchEnd = now;
 }, false);
 
+/* ============================================================
+   TOUCH CAMERA LOOK
+   ============================================================ */
+
+const touchLookZone = document.getElementById('touchLookZone');
+
+let lookTouchId = null;
+let lookLastX = 0;
+let lookLastY = 0;
+const LOOK_SENSITIVITY = 0.005;
+
+
+function handleLookStart(e) {
+  if (!touchLookZone) return;
+  if (lookTouchId !== null) return;
+  e.preventDefault();
+  const touch = e.changedTouches[0];
+  lookTouchId = touch.identifier;
+  lookLastX = touch.clientX;
+  lookLastY = touch.clientY;
+}
+
+function handleLookMove(e) {
+  if (lookTouchId === null) return;
+  e.preventDefault();
+
+  let touch = null;
+  for (const t of e.changedTouches) {
+    if (t.identifier === lookTouchId) {
+      touch = t;
+      break;
+    }
+  }
+  if (!touch) return;
+
+  const dx = touch.clientX - lookLastX;
+  const dy = touch.clientY - lookLastY;
+
+  lookLastX = touch.clientX;
+  lookLastY = touch.clientY;
+
+    // ⚠️ Yaw (360° անսահմանափակ)
+  cameraYawOffset -= dx * LOOK_SENSITIVITY;
+
+  // ⚠️ Pitch (վերև/ներքև, -60°-ից +60°)
+  cameraPitchOffset += dy * LOOK_SENSITIVITY;
+  cameraPitchOffset = Math.max(-Math.PI / 4, Math.min(Math.PI / 4, cameraPitchOffset));
+}
+
+
+function handleLookEnd(e) {
+  if (lookTouchId === null) return;
+  for (const t of e.changedTouches) {
+    if (t.identifier === lookTouchId) {
+      lookTouchId = null;
+      break;
+    }
+  }
+  // ⚠️ Վերականգնում ենք camera-ն սկզբնական դիրքի
+  cameraPitchOffset = 0;
+  cameraYawOffset = 0;
+}
+
+if (touchLookZone) {
+  touchLookZone.addEventListener('touchstart', handleLookStart, { passive: false });
+  touchLookZone.addEventListener('touchmove', handleLookMove, { passive: false });
+  touchLookZone.addEventListener('touchend', handleLookEnd, { passive: false });
+  touchLookZone.addEventListener('touchcancel', handleLookEnd, { passive: false });
+}
+
+// ========== DESKTOP — MOUSE LOOK ==========
+let mouseLookActive = false;
+
+window.addEventListener('mousedown', (e) => {
+  if (e.button === 2) {
+    mouseLookActive = true;
+    lookLastX = e.clientX;
+    lookLastY = e.clientY;
+    e.preventDefault();
+  }
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (!mouseLookActive) return;
+  const dx = e.clientX - lookLastX;
+  const dy = e.clientY - lookLastY;
+  lookLastX = e.clientX;
+  lookLastY = e.clientY;
+
+  cameraYawOffset -= dx * LOOK_SENSITIVITY;
+
+  cameraPitchOffset += dy * LOOK_SENSITIVITY;
+  cameraPitchOffset = Math.max(-Math.PI / 4, Math.min(Math.PI / 4, cameraPitchOffset));
+});
+
+window.addEventListener('mouseup', (e) => {
+  if (e.button === 2) {
+    mouseLookActive = false;
+    cameraPitchOffset = 0;
+    cameraYawOffset = 0;
+  }
+});
+window.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+});
 /* ============================================================
    ՎԵՐՋ 🎉
    ============================================================ */
